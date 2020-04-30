@@ -39,7 +39,7 @@ class DecisionMaker(ABC):
         # Zero out already generated options
         mult = np.ones(self.denv.num_options)
         if gen_idc:
-            np.put(mult, gen_idc, 0)
+            np.put(mult, gen_idc, float("-inf"))
         gen_util = np.multiply(mult, self.denv.util[self.curr_dec_idx])
 
         probs = softmax(gen_util)
@@ -93,15 +93,31 @@ class DecisionMaker(ABC):
 
         return (upd_val, upd_sdev)
 
-    def get_best(self, mode, dec_idx=None):
+    def choose(self, mode, dec_idx=None):
         if dec_idx is None:
             return [
-                self.get_best(mode, dec_idx=i) for i in range(self.denv.num_decisions)
+                self.choose(mode, dec_idx=i) for i in range(self.denv.num_decisions)
             ]
         else:
-            idx = sorted(self.est_util[dec_idx].items(), key=lambda x: x[1][0])[0][0]
+            # best option by estimated util, the keys in self.est_util
+            # idx = sorted(self.est_util[dec_idx].items(), key=lambda x: x[1][0])[0][0]
+
+            # softmax, -inf for probability 0 for ungenerated options
+            vals = np.full((self.denv.num_options,), float("-inf"))
+            gen_idc = list(self.est_util[self.curr_dec_idx].keys())
+            if gen_idc:
+                gen_vals = [self.est_util[self.curr_dec_idx][i][0] for i in gen_idc]
+                np.put(vals, gen_idc, gen_vals)
+            else:
+                raise RuntimeError("Call choose without having generated any options.")
+
+            probs = softmax(vals)
+            idx = np.random.choice(self.denv.num_options, p=probs)
+
+            if idx not in gen_idc:
+                raise ValueError("Chose option not generated yet.")
+
             if mode == "idx":
-                # sort by estimated util, the keys in self.est_util
                 return idx
             elif mode == "val":
                 return self.denv.util[dec_idx][idx]
@@ -115,7 +131,7 @@ class DecisionMaker(ABC):
         axs[0].bar(range(self.denv.num_decisions), self.cost)
         axs[0].set_title("Cost for each decision")
 
-        gross_util = self.get_best("val")
+        gross_util = self.choose("val")
         net_util = [
             gross_util[i] - self.cost[i] for i in range(self.denv.num_decisions)
         ]
@@ -167,9 +183,9 @@ class FixedDecisionMaker(DecisionMaker):
             idx = self.generate()
 
         for _ in range(num_cheap_est):
-            best_idx = self.get_best("idx", dec_idx=self.curr_dec_idx)
+            best_idx = self.choose("idx", dec_idx=self.curr_dec_idx)
             self.estimate(best_idx, mode="cheap")
 
         for _ in range(num_expensive_est):
-            best_idx = self.get_best("idx", dec_idx=self.curr_dec_idx)
+            best_idx = self.choose("idx", dec_idx=self.curr_dec_idx)
             self.estimate(best_idx, mode="expensive")
