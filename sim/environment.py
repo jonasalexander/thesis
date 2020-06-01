@@ -1,86 +1,180 @@
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
+
+from base import BaseGridMixin
 
 
 class DecisionEnvironment:
-    def __init__(
-        self,
-        num_decisions=10,
-        num_options=100,
-        util_dist_type="normal",
-        util_param="pareto",
-        seed=40,
-    ):
+    """The environment in which the agent acts.
 
-        np.random.seed(seed)
+    Two possible actions, A_1 and A_2. The better has value V, the worse Vp.
+    The agent gets noisy signals Vh_1 and Vh_2 for A_1 and A_2 respectively
+    and must either get the true values (and thus get the higher value V) at
+    a certain cost or just do A_1 and hope for the best.
+    """
 
-        self.num_decisions = num_decisions
-        self.num_options = num_options
+    def __init__(self, V=1, Vp=0, N=50, sigma=1):
+        """Initialize the decision environment.
 
-        if util_dist_type == "normal":
-            if util_param == "pareto":
-                shape = 2
-                mode = 10
-                self.opt_vars = (np.random.pareto(shape, self.num_decisions) + 1) * mode
-                cov = np.diag(self.opt_vars)
-            else:
-                raise NotImplementedError(f"Unrecognized util_param {util_param}")
+        Parameters
+        ----------
+        V : numeric
+            The value of the better action. Defaults to 1.
+        Vp : numeric
+            The value of the worse action. Defaults to 0.
+        N : int
+            The number of trials/equal decisions in the environment. Defaults
+            to 50.
+        sigma : numeric
+            The standard deviation of Vh_i as a Gaussian function of V/Vp.
+            Defaults to 1.
+        """
 
-            self.opt_mean = 10
-            loc = [self.opt_mean] * self.num_decisions
-            # np.random.normal(loc=10, scale=3, size=self.num_decisions)
-            self.util = np.transpose(
-                np.random.multivariate_normal(loc, cov, self.num_options)
+        self.V = V
+        self.Vp = Vp
+        self.N = N
+        self.sigma = sigma
+
+        self.data = pd.DataFrame(index=pd.RangeIndex(N))
+
+        # draw N Vh_1 from V
+        self.data["Vh_1"] = np.random.normal(V, sigma, N)
+        # draw N Vh_2 from V'
+        self.data["Vh_2"] = np.random.normal(Vp, sigma, N)
+
+        # the better of V(A_1) and V(A_2)
+        self.data["dynamic"] = V
+
+        # whether Vh_1 < Vh_2
+        self.data["switch"] = 0
+
+        for i in range(N):
+
+            Vh_1 = self.data.loc[i, "Vh_1"]
+            Vh_2 = self.data.loc[i, "Vh_2"]
+
+            if Vh_1 < Vh_2:
+                self.data.loc[i, "switch"] = 1
+                Vh_1, Vh_2 = Vh_2, Vh_1  # switch so that Vh_1 is larger
+
+            p1 = np.exp(-0.5 * (((Vh_1 - V) / sigma) ** 2 + ((Vh_2 - Vp) / sigma) ** 2))
+            p2 = np.exp(-0.5 * (((Vh_1 - Vp) / sigma) ** 2 + ((Vh_2 - V) / sigma) ** 2))
+
+            denom = p1 + p2
+            # probability that Vh_1 is drawn from V (as opposed to V')
+            self.data.loc[i, "probs"] = p1 / denom
+
+            # expected gain of evaluating
+            self.data.loc[i, "gain"] = V - (V * p1 + Vp * p2) / denom
+            # V(A_1)
+            self.data.loc[i, "default"] = [V, Vp][self.data.loc[i, "switch"]]
+
+    def plot_gain(self, only_exp=False):
+        fig, ax1 = plt.subplots()
+        fig.suptitle(f"V={self.V}, V'={self.Vp}, sigma={self.sigma}")
+
+        ax1.plot(self.data["gain"], label="expected gain from eval", color="r")
+        ax1.set_ylabel("Expected gain from eval")
+
+        if not only_exp:
+            diffs = abs(self.data["Vh_1"] - self.data["Vh_2"])
+            ax2 = ax1.twinx()
+            ax2.plot(diffs, label="diff between vhats", color="b")
+            ax2.set_ylabel("Difference between vhats")
+            fig.legend()
+
+        plt.show()
+
+
+class DecisionEnvironmentGrid(BaseGridMixin):
+    def __init__(self, params):
+        """Initialize decision environment grid.
+
+        Parameters
+        ----------
+        params : dict, str -> list
+        num : int
+            Number of decision environments to compare between min_val and
+            max_val.
+        num_samples : int
+        **kwargs
+            Passed on to
+        """
+
+        self.params = params
+        self.param_names = list(params.keys())
+        self.num_params = len(self.param_names)
+
+        if self.num_params == 0:
+            raise ValueError("Params has no keys, must have at least one.")
+        elif self.num_params > 2:
+            raise NotImplementedError(
+                "DecisionEnvironmentGrid currently supports at most 2 parameters."
             )
-            # print(np.amin(self.util, axis=0))
-        else:
-            raise NotImplementedError(f"Unrecognized util_dist_type {util_dist_type}")
 
-        # sort utility, decreasing
-        self.util.sort(axis=1)
-        self.util = np.flip(self.util, axis=1)
+        self.param_settings = pd.DataFrame({"key": [1]})
+        for k, v in self.params.items():
+            temp = pd.DataFrame(v, columns=[k])
+            temp["key"] = 1
+            self.param_settings = self.param_settings.merge(temp, on="key", how="outer")
+        self.param_settings = self.param_settings.drop(columns="key")
 
-    def visualize(self, num_rows=2):
-        if self.num_decisions % num_rows == 0:
-            num_cols = int(self.num_decisions / num_rows)
-            fig, axs = plt.subplots(num_rows, num_cols, sharex=True, sharey=True)
-            for i in range(num_rows):
-                for j in range(num_cols):
-                    axs[i][j].hist(self.util[i * num_cols + j])
-                    axs[i][j].set_title(f"Decision {i*num_cols+j+1}")
+    def plot_compare(
+        self, title, diff=False, dm=None, average=False, gain=False, **kwargs
+    ):
+        self.data = pd.DataFrame()
+        for i, row in self.param_settings.iterrows():
+            for j, param in enumerate(self.param_names):
+                kwargs.update({param: row[j]})
+            env = DecisionEnvironment(**kwargs)
 
-        else:
-            fig, axs = plt.subplots(1, self.num_decisions, sharey=True)
+            temp = pd.DataFrame()
+            if average:
+                if dm is not None:
+                    temp = temp.append(
+                        {"type": "dynamic", "util": np.mean(dm.decide(env))},
+                        ignore_index=True,
+                    )
+                    temp = temp.append(
+                        {"type": "always_eval", "util": env.V - dm.cost_eval},
+                        ignore_index=True,
+                    )
+                else:
+                    if diff:
+                        temp = temp.append(
+                            {
+                                "type": "difference",
+                                "util": np.mean(env.data["dynamic"])
+                                - np.mean(env.data["default"]),
+                            },
+                            ignore_index=True,
+                        )
+                    else:
+                        temp = temp.append(
+                            {"type": "dynamic", "util": np.mean(env.data["dynamic"])},
+                            ignore_index=True,
+                        )
+                if not diff:
+                    temp = temp.append(
+                        {"type": "default", "util": np.mean(env.data["default"])},
+                        ignore_index=True,
+                    )
 
-            for i in range(self.num_decisions):
-                axs[i].hist(self.util[i])
+            elif gain:
+                temp = temp.append(
+                    {"type": "gain", "util": np.mean(env.data["gain"])},
+                    ignore_index=True,
+                )
 
-        fig.suptitle(f"Distribution of {self.num_options} options for each decision")
-        plt.show()
+            for j, param in enumerate(self.param_names):
+                temp[param] = row[j]
 
-        avg_opt_util = [
-            sum(self.util[i]) / self.num_options for i in range(self.num_decisions)
-        ]
-        plt.bar(range(1, self.num_decisions + 1), avg_opt_util)
-        plt.title("Average utility in each decision")
-        plt.show()  # should be similar due to LLN
+            self.data = self.data.append(self.param_settings.merge(temp))
 
-        diff_opt_util = [
-            max(self.util[i]) - min(self.util[i]) for i in range(self.num_decisions)
-        ]
-        plt.bar(range(1, self.num_decisions + 1), diff_opt_util)
-        plt.title("Max difference of options for each decision")
-        plt.show()  # should be different, some decisions more important than others
-
-        plt.bar(
-            range(1, self.num_decisions + 1),
-            [max(self.util[i]) for i in range(self.num_decisions)],
-        )
-        plt.title("Max value of options for each decision")
-        plt.show()
+        self.plot(title)
 
 
 if __name__ == "__main__":
-    de = DecisionEnvironment()
-    de.visualize()
+    env = DecisionEnvironment()
+    env.plot_gain()

@@ -2,3 +2,5 @@ black
 jupyterlab
 matplotlib
 numpy
+pandas
+seaborn
