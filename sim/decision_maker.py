@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from base import BaseGridMixin
+from base import BaseGrid
 
 
 class DecisionMaker:
@@ -48,61 +48,65 @@ class DecisionMaker:
         self.decide(env)
 
 
-class DecisionMakerGrid(BaseGridMixin):
+class DecisionMakerGrid(BaseGrid):
     """Compare decision makers for different parameter settings."""
 
-    def __init__(self, params, env, average=True, **kwargs):
-        """Initialize decision maker grid.
+    def __init__(self, params):
+        """Initialize decision maker grid."""
+
+        super().__init__(params)
+
+    def plot_complex(self, title, mode="gain", env=None, **kwargs):
+        """Plot results across the environments in the grid.
 
         Parameters
         ----------
-        param : str
-        min_val : numeric
-        max_val : numeric
-        num : int
-            Number of decision makers to compare between min_val and max_val.
-        num_samples : int
+        title : str
+            The title of the chart (facet grid) to be produced.
+        mode : str, optional
+            The type of chart to draw. Defaults to "gain", except if env is
+            passed then it is set to "env".
+        env : DecisionEnvironment, optional
+            If passed and gain is False, evaluate the decision makers on this
+            environment. Defaults to None.
         **kwargs
-            Passed on to
+            Passed on to DecisionMaker.
         """
 
-        self.params = params
-        self.param_names = list(params.keys())
-        self.num_params = len(self.param_names)
-        self.env = env
-
-        if self.num_params == 0:
-            raise ValueError("Params has no keys, must have at least one.")
-        elif self.num_params > 2:
-            raise NotImplementedError(
-                f"DecisionMakerGrid currently supports at most 2 parameters, "
-                f"but got {self.num_params}."
-            )
-
-        parameter_settings = pd.DataFrame({"key": [1]})
-        for k, v in self.params.items():
-            temp = pd.DataFrame(v, columns=[k])
-            temp["key"] = 1
-            parameter_settings = parameter_settings.merge(temp, on="key", how="outer")
-        parameter_settings = parameter_settings.drop(columns="key")
+        if env is not None:
+            mode = "env"
 
         self.data = pd.DataFrame()
-        for i, row in parameter_settings.iterrows():
+        for i, row in self.param_settings.iterrows():
             for j, param in enumerate(self.param_names):
                 kwargs.update({param: row[j]})
             dm = DecisionMaker(**kwargs)
 
             temp = pd.DataFrame()
-            if average:
+            if mode == "gain":
                 temp = temp.append(
-                    {"type": "dynamic", "util": np.mean(dm.decide(self.env))},
+                    {"type": "gain", "util": np.mean(env.data["gain"])},
+                    ignore_index=True,
+                )
+            elif mode == "env":
+                temp = temp.append(
+                    {"type": "dynamic", "util": np.mean(dm.decide(env))},
                     ignore_index=True,
                 )
                 temp = temp.append(
-                    {"type": "default", "util": np.mean(self.env.data["default"])},
+                    {"type": "always_eval", "util": env.V - dm.cost_eval},
                     ignore_index=True,
                 )
-                for j, param in enumerate(self.param_names):
-                    temp[param] = row[j]
+                temp = temp.append(
+                    {"type": "default", "util": np.mean(env.data["default"])},
+                    ignore_index=True,
+                )
+            else:
+                raise ValueError(f"Unrecognized mode {mode}.")
 
-                self.data = self.data.append(parameter_settings.merge(temp))
+            for j, param in enumerate(self.param_names):
+                temp[param] = row[j]
+
+            self.data = self.data.append(self.param_settings.merge(temp))
+
+        self.plot(title)

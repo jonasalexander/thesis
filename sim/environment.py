@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from base import BaseGridMixin
+from base import BaseGrid
 
 
 class DecisionEnvironment:
@@ -89,37 +89,13 @@ class DecisionEnvironment:
         plt.show()
 
 
-class DecisionEnvironmentGrid(BaseGridMixin):
+class DecisionEnvironmentGrid(BaseGrid):
     def __init__(self, params):
-        """Initialize decision environment grid.
+        """Initialize decision environment grid."""
 
-        Parameters
-        ----------
-        params : dict, str -> list
-            Dict where the key is the string parameter name and the value is a
-            list of values that parameter should take on.
-        """
+        super().__init__(params)
 
-        self.params = params
-        self.param_names = list(params.keys())
-        self.num_params = len(self.param_names)
-
-        if self.num_params == 0:
-            raise ValueError("Params has no keys, must have at least one.")
-        elif self.num_params > 2:
-            raise NotImplementedError(
-                "DecisionEnvironmentGrid currently supports at most 2 parameters."
-            )
-
-        # Cartesian product of parameter values, each row is 1 environment
-        self.param_settings = pd.DataFrame({"key": [1]})
-        for k, v in self.params.items():
-            temp = pd.DataFrame(v, columns=[k])
-            temp["key"] = 1
-            self.param_settings = self.param_settings.merge(temp, on="key", how="outer")
-        self.param_settings = self.param_settings.drop(columns="key")
-
-    def plot_compare(self, title, mode="gain", dm=None, **kwargs):
+    def plot_complex(self, title, mode="gain", dm=None, **kwargs):
         """Plot results across the environments in the grid.
 
         Parameters
@@ -130,8 +106,8 @@ class DecisionEnvironmentGrid(BaseGridMixin):
             The type of chart to draw. Defaults to "gain", except if dm is
             passed then it is set to "dm".
         dm : DecisionMaker, optional
-            If passed and gain is False, evaluate the decision maker on the
-            environment. Defaults to None.
+            If passed and gain is False, evaluate this decision maker on the
+            environments. Defaults to None.
         **kwargs
             Passed on to DecisionEnvironment.
         """
@@ -158,20 +134,6 @@ class DecisionEnvironmentGrid(BaseGridMixin):
                 )
                 temp = temp.append(
                     {"type": "always_eval", "util": env.V - dm.cost_eval},
-                    ignore_index=True,
-                )
-            elif mode == "diff":
-                temp = temp.append(
-                    {
-                        "type": "difference",
-                        "util": np.mean(env.data["dynamic"])
-                        - np.mean(env.data["default"]),
-                    },
-                    ignore_index=True,
-                )
-            elif mode == "compare":
-                temp = temp.append(
-                    {"type": "dynamic", "util": np.mean(env.data["dynamic"])},
                     ignore_index=True,
                 )
                 temp = temp.append(
