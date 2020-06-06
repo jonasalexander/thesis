@@ -130,6 +130,13 @@ class DecisionEnvironmentGrid(BaseGrid):
                     {"type": "default", "util": np.mean(env.data["default"])},
                     ignore_index=True,
                 )
+                temp = temp.append(
+                    {
+                        "type": "probability of eval",
+                        "util": np.mean(dm.data["did_eval"]),
+                    },
+                    ignore_index=True,
+                )
             else:
                 raise ValueError(f"Unrecognized mode {mode}.")
 
