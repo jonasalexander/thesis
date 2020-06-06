@@ -64,27 +64,17 @@ class DecisionEnvironment:
             # V(A_1)
             self.data.loc[i, "default"] = [V, Vp][self.data.loc[i, "switch"]]
 
-    def plot_gain(self, only_exp=False):
-        """Plot gain for each trial.
-        Parameters
-        ----------
-        only_exp : Boolean, optional
-            Whether to display only expected gain or delta of Vh_i as well.
-            Defaults to False.
-        """
+    def plot_gain(self):
+        """Plot gain for each trial as a function of delta vhats."""
+
+        diffs = abs(self.data["Vh_1"] - self.data["Vh_2"])
 
         fig, ax1 = plt.subplots()
         fig.suptitle(f"V={self.V}, V'={self.Vp}, sigma={self.sigma}")
 
-        ax1.plot(self.data["gain"], label="expected gain from eval", color="r")
-        ax1.set_ylabel("Expected gain from eval")
-
-        if not only_exp:
-            diffs = abs(self.data["Vh_1"] - self.data["Vh_2"])
-            ax2 = ax1.twinx()
-            ax2.plot(diffs, label="diff between vhats", color="b")
-            ax2.set_ylabel("Difference between vhats")
-            fig.legend()
+        plt.scatter(diffs, self.data["gain"])
+        plt.xlabel("Difference between vhats")
+        plt.ylabel("Expected gain from eval")
 
         plt.show()
 
