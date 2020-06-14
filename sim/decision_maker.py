@@ -3,6 +3,7 @@ import numpy as np
 from math import sqrt
 import seaborn as sns
 import matplotlib.pyplot as plt
+from collections import Counter
 
 
 class DecisionMaker:
@@ -81,8 +82,8 @@ class DecisionMaker:
 
                 if i == self.env.N:
                     # have evaluated all the actions
-                    self.data.loc[s, "num_eval"] = i
-                    self.data.loc[s, "dynamic"] = Vb - i * self.cost_eval
+                    # know the agent will be able to get the best actions
+                    Vb_index = 0
                     break
 
                 v_floored_dist = v_dist[:, i:]
@@ -96,28 +97,34 @@ class DecisionMaker:
 
                 if Vb > V_eval:
                     # Vb is better than expectation of continuing to evaluate
-                    self.data.loc[s, "num_eval"] = i
-                    self.data.loc[s, "dynamic"] = Vb - i * self.cost_eval
-
                     break
                 else:
                     # keep evaluating, recurse
                     V_i = self.env.V[vhats.sort_values(ascending=False).index[i]]
                     if V_i > Vb:
+                        Vb_index = vhats.sort_values(ascending=False).index[i]
                         Vb = V_i
 
-    def plot_util(self, limit=50):
+            self.data.loc[s, "num_eval"] = i
+            self.data.loc[s, "dynamic"] = Vb - i * self.cost_eval
+            self.data.loc[s, "dynamic_index"] = Vb_index
+
+    def plot_util(self, limit=50, plot_num_eval=True):
         """Plot utility of different agents for each trial.
 
         Parameters
         ----------
         limit : integer, optional
-            Number of trials for which to display utility
+            Number of trials for which to display utility. Defaults to 50.
+        plot_num_eval : Boolean, optional
+            Whether to show the number of actions the dynamic agent evaluates
+            on another y axis. Defaults to True.
         """
 
-        to_plot = self.data.loc[: limit - 1].reset_index().drop(columns="num_eval")
+        subset = self.data.loc[: limit - 1]
+        to_plot = subset.reset_index().drop(columns=["num_eval", "dynamic_index"])
 
-        fig, ax = plt.subplots(figsize=(15, 10))
+        fig, ax = plt.subplots(figsize=(20, 10))
 
         ax = sns.lineplot(
             ax=ax,
@@ -126,9 +133,45 @@ class DecisionMaker:
             y="util",
             hue="type",
         )
+        plt.xlabel("Trial number")
+        plt.ylabel("Utility")
+        plt.title("Utility across different trials")
 
-    def summary(self):
-        """Create string summarizing agents' average performance."""
+        if plot_num_eval:
+            color = "black"
+            ax2 = ax.twinx()
+            ax2.set_ylabel(
+                "Number of actions evaluated by dynamic agent/Rank of the action chosen"
+            )
+            ax2.scatter(subset.index, subset["num_eval"], color=color, linewidth=2)
+            ax2.tick_params(axis="y", labelcolor=color)
+
+            color = "red"
+            ax2.scatter(subset.index, subset["dynamic_index"], color=color, linewidth=2)
+
+        plt.show()
+
+    def summary(self, table=False):
+        """Create string summarizing agents' average performance.
+
+        Parameters
+        ----------
+        table : Boolean, optional
+            If True, return formatted as table and not string.
+        """
+
+        if table:
+            df = (
+                pd.DataFrame(self.data.mean(axis=0))
+                .drop(["num_eval", "dynamic_index"])
+                .rename(columns={0: "mean"})
+                .assign(
+                    median=lambda df: np.median(
+                        self.data.drop(columns=["num_eval", "dynamic_index"]), axis=0
+                    )
+                )
+            )
+            return df
 
         BOLD = "\033[1m"
         END = "\033[0m"
@@ -147,3 +190,29 @@ class DecisionMaker:
             f"\nwhile the fixed-K agents achieved average utility:"
             f"\n{k_agent_results}"
         )
+
+    def plot_num_eval_index(self, limit=50):
+        """Plot index of the action chosen as a function of the num_eval.
+
+        Parameters
+        ----------
+        limit : integer, optional
+            Number of trials for which to display utility. Defaults to 50.
+        """
+
+        subset = self.data.loc[: limit - 1]
+
+        num_eval = subset["num_eval"]
+        index = subset["dynamic_index"]
+
+        weights = [
+            20 * i for i in Counter(zip(num_eval, index)).values() for j in range(i)
+        ]
+
+        plt.scatter(num_eval, index, s=weights)
+        plt.xlabel("number evaluated")
+        plt.ylabel("index of action chosen")
+        plt.title(
+            "Index of action chosen as a function of number evaluated for first 50 trials"
+        )
+        plt.show()
