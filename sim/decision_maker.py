@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-
-from base import BaseGrid
+from math import sqrt
 
 
 class DecisionMaker:
@@ -17,7 +15,7 @@ class DecisionMaker:
             The utility cost to evaluate an action.
         threshold : numeric
             The value where when the expected value of gain is above this,
-            the agent evaluates. Defaults to cost_eval
+            the agent evaluates. Defaults to cost_eval (rational).
         """
 
         self.cost_eval = cost_eval
@@ -25,88 +23,78 @@ class DecisionMaker:
 
         self.data = pd.DataFrame()
 
-    def decide(self, env):
+    def decide(self, env, num_samples=1000):
         """Make decisions in a given environment.
 
         Parameters
         ----------
         env : DecisionEnvironment
+        num_samples : integer, optional
+            The number of samples to draw for each V as a function of Vhat.
+            Defaults to 100.
         """
 
-        # indices where evaluate
-        idx = env.data["gain"] > self.threshold
-        # 1 if agent evaluated
-        self.data["did_eval"] = 0
-        self.data.loc[idx, "did_eval"] = 1
+        self.data = pd.DataFrame(index=pd.RangeIndex(env.num_trials))
 
-        self.data["util"] = env.data["default"].copy()
-        self.data.loc[idx, "util"] = env.data.loc[idx, "dynamic"] - self.cost_eval
+        # used to add increasing cost of eval to actions evaluated later
+        cost_eval_list = [i * self.cost_eval for i in range(env.N)]
+        cost_eval_adjuster = np.transpose(
+            np.repeat(cost_eval_list, num_samples).reshape((env.N, num_samples))
+        )
 
-        return self.data["util"].copy()
+        # the best action
+        self.data["optimal"] = env.V.max()
 
-    def plot_exp_gain(self, env):
-        self.decide(env)
+        # Assign value of highest V action among the k-best actions by Vhat
+        for k in env.k_values:
+            # by Vhat, for each trial
+            k_best_actions = np.array(
+                [env.vhats.loc[r].nlargest(k).index.values for r in env.vhats.index]
+            )
+            self.data["K: " + str(k)] = [
+                max(env.V[x]) - k * self.cost_eval for x in k_best_actions
+            ]
 
+        # for each trial
+        for s in range(env.num_trials):
 
-class DecisionMakerGrid(BaseGrid):
-    """Compare decision makers for different parameter settings."""
+            vhats = env.vhats.loc[s]
 
-    def __init__(self, params):
-        """Initialize decision maker grid."""
+            # Empirical distribution of V given Vhat, excluding cost_eval
+            cov = sqrt(env.tau ** 2 + env.sigma ** 2)
+            cov_matrix = np.diag(np.repeat(cov, env.N))
+            v_dist = np.random.multivariate_normal(vhats, cov_matrix, num_samples)
 
-        super().__init__(params)
+            # For now, assume agent has to get the value of the first action
 
-    def plot_complex(self, title, mode="gain", env=None, **kwargs):
-        """Plot results across the environments in the grid.
+            # TODO: just change initialization to vhats[0]?
 
-        Parameters
-        ----------
-        title : str
-            The title of the chart (facet grid) to be produced.
-        mode : str, optional
-            The type of chart to draw. Defaults to "gain", except if env is
-            passed then it is set to "env".
-        env : DecisionEnvironment, optional
-            If passed and gain is False, evaluate the decision makers on this
-            environment. Defaults to None.
-        **kwargs
-            Passed on to DecisionMaker.
-        """
+            Vb = -float("inf")  # best so far
+            for i in range(env.N + 1):
 
-        if env is not None:
-            mode = "env"
+                if i == env.N:
+                    # have evaluated all the actions
+                    self.data.loc[s, "num_eval"] = i
+                    self.data.loc[s, "dynamic"] = Vb - i * self.cost_eval
+                    break
 
-        self.data = pd.DataFrame()
-        for i, row in self.param_settings.iterrows():
-            for j, param in enumerate(self.param_names):
-                kwargs.update({param: row[j]})
-            dm = DecisionMaker(**kwargs)
+                v_floored_dist = v_dist[:, i:]
+                v_floored_dist[v_floored_dist < Vb] = Vb
+                # After each time period, we've already paid one cost_eval,
+                # sunk cost
+                v_floored_dist -= cost_eval_adjuster[:, : env.N - i]
 
-            temp = pd.DataFrame()
-            if mode == "gain":
-                temp = temp.append(
-                    {"type": "gain", "util": np.mean(env.data["gain"])},
-                    ignore_index=True,
-                )
-            elif mode == "env":
-                temp = temp.append(
-                    {"type": "dynamic", "util": np.mean(dm.decide(env))},
-                    ignore_index=True,
-                )
-                temp = temp.append(
-                    {"type": "always_eval", "util": env.V - dm.cost_eval},
-                    ignore_index=True,
-                )
-                temp = temp.append(
-                    {"type": "default", "util": np.mean(env.data["default"])},
-                    ignore_index=True,
-                )
-            else:
-                raise ValueError(f"Unrecognized mode {mode}.")
+                # utility of continuing to evaluate, based on empirical distr.
+                V_eval = max(v_floored_dist.mean(axis=0)) - self.cost_eval
 
-            for j, param in enumerate(self.param_names):
-                temp[param] = row[j]
+                if Vb > V_eval:
+                    # Vb is better than expectation of continuing to evaluate
+                    self.data.loc[s, "num_eval"] = i
+                    self.data.loc[s, "dynamic"] = Vb - i * self.cost_eval
 
-            self.data = self.data.append(self.param_settings.merge(temp))
-
-        self.plot(title)
+                    break
+                else:
+                    # keep evaluating, recurse
+                    V_i = env.V[vhats.sort_values(ascending=False).index[i]]
+                    if V_i > Vb:
+                        Vb = V_i
