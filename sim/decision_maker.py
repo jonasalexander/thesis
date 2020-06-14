@@ -35,7 +35,7 @@ class DecisionMaker:
         ----------
         num_samples : integer, optional
             The number of samples to draw for each V as a function of Vhat.
-            Defaults to 100.
+            Defaults to 1000.
         """
 
         self.data = pd.DataFrame(index=pd.RangeIndex(self.env.num_trials))
