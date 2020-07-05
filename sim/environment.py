@@ -40,6 +40,7 @@ class DecisionEnvironment:
         self.tau = tau
 
         self.k_values = k_values or [1, 2, 3, 4, 5, 7, 10]
+        self.k_value_names = ["K" + str(k) for k in self.k_values]
 
         # each row is a trial
         self.V = pd.DataFrame(index=pd.RangeIndex(num_trials))

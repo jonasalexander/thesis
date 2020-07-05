@@ -51,7 +51,7 @@ class DecisionMaker:
         self.data["optimal"] = self.env.V.max(axis=1)
 
         # Assign value of highest V action among the k-best actions by Vhat
-        for k in self.env.k_values:
+        for k, k_name in zip(self.env.k_values, self.env.k_value_names):
             # by Vhat, for each trial
             k_best_actions = np.array(
                 [
@@ -59,7 +59,7 @@ class DecisionMaker:
                     for r in self.env.Vhat.index
                 ]
             )
-            self.data["K" + str(k)] = [
+            self.data[k_name] = [
                 max(self.env.V.loc[i, x]) - k * self.cost_eval
                 for i, x in enumerate(k_best_actions)
             ]
@@ -123,8 +123,14 @@ class DecisionMaker:
             on another y axis. Defaults to True.
         """
 
-        subset = self.data.loc[: limit - 1]
-        to_plot = subset.reset_index().drop(columns=["num_eval", "dynamic_index"])
+        normalized_data = self.data.copy()
+        for agent in self.env.k_value_names + ["dynamic"]:
+            normalized_data[agent] -= normalized_data["optimal"]
+
+        subset = normalized_data.loc[: limit - 1]
+        to_plot = subset.reset_index().drop(
+            columns=["num_eval", "dynamic_index", "optimal"]
+        )
 
         fig, ax = plt.subplots(figsize=(20, 10))
 
@@ -137,7 +143,7 @@ class DecisionMaker:
         )
         plt.xlabel("Trial number")
         plt.ylabel("Utility")
-        plt.title("Utility across different trials")
+        plt.title("Utility across different trials (0 = optimal)")
 
         if plot_num_eval:
             color = "black"
