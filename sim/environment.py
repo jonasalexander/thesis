@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 class DecisionEnvironment:
     """The environment in which the agent acts."""
 
-    def __init__(self, N=12, num_trials=50, sigma=1, tau=1, k_values=None, mu=0):
+    def __init__(self, N=12, num_trials=50, sigma=1, mu=0, tau=1, k_values=None):
         """Initialize the decision environment.
 
         Parameters
@@ -17,20 +17,24 @@ class DecisionEnvironment:
             The number of trials/equal decisions in the environment. Defaults
             to 50.
         sigma : numeric, optional
-            The standard deviation of Vh_i as a Gaussian function of V/Vp.
+            The standard deviation of V as a Gaussian function of Vhat_i.
             Defaults to 1.
+        mu : numeric, optional
+            The mean of the value of actions (generative). Defaults to 0.
         tau : numeric, optional
-            The standard deviation of V, the values for different actions.
+            The standard deviation of V_hat, the context-free values for
+            different actions (st. deviation from mu).
         k_values : list of integers, optional
             Values of K for which to evaluate static agents. Defaults to
             [1, 2, 3, 4, 5, 7, 10].
-        mu : numeric, optional
-            The mean of the value of actions (generative). Defaults to 0.
         """
 
         self.N = N
-        # TODO: get different V each trial too
-        self.V = np.sort(np.random.normal(mu, tau, N))[::-1]
+        # each row of V (axis=1) is 1 trial
+        unsorted_Vhat = np.random.multivariate_normal(
+            np.repeat(mu, N), np.diag(np.repeat(tau, N)), num_trials
+        )
+        self.Vhat = pd.DataFrame(np.sort(unsorted_Vhat, 1)[:, ::-1])
         self.num_trials = num_trials
         self.sigma = sigma
         self.tau = tau
@@ -38,17 +42,17 @@ class DecisionEnvironment:
         self.k_values = k_values or [1, 2, 3, 4, 5, 7, 10]
 
         # each row is a trial
-        self.vhats = pd.DataFrame(index=pd.RangeIndex(num_trials))
+        self.V = pd.DataFrame(index=pd.RangeIndex(num_trials))
 
         # Draw Vh_i from V_i for each trial
-        for i, v in enumerate(self.V):
-            self.vhats[i] = np.random.normal(v, sigma, num_trials)
+        for action in self.Vhat.columns:
+            self.V[action] = np.random.multivariate_normal(
+                self.Vhat[action], np.diag(np.repeat(1, num_trials))
+            )
 
     def plot_action_values(self):
         """Plot a number line with the values of the actions."""
-        fig, ax = plt.subplots(figsize=(8, 0.15))
-        plt.scatter(self.V, np.repeat(0, len(self.V)))
-        ax.get_yaxis().set_visible(False)
+        plt.hist(self.V.flatten())
         plt.xlabel("Value of action")
         plt.show()
 
@@ -65,7 +69,7 @@ class DecisionEnvironment:
         plt.xlabel("Vhat")
         plt.ylabel("Count")
         plt.title(
-            f"Distribution of vhats for action {action_idx} with value "
-            f"{self.V[action_idx]:.2f} (across trials)"
+            f"Distribution of vhats for action {action_idx} with average value "
+            f"{np.mean(self.V[:, action_idx]):.2f} (across trials)"
         )
         plt.show()

@@ -47,35 +47,37 @@ class DecisionMaker:
             np.repeat(cost_eval_list, num_samples).reshape((self.env.N, num_samples))
         )
 
-        # the best action
-        self.data["optimal"] = self.env.V.max()
+        # the best actiona
+        self.data["optimal"] = self.env.V.max(axis=1)
 
         # Assign value of highest V action among the k-best actions by Vhat
         for k in self.env.k_values:
             # by Vhat, for each trial
             k_best_actions = np.array(
                 [
-                    self.env.vhats.loc[r].nlargest(k).index.values
-                    for r in self.env.vhats.index
+                    self.env.Vhat.loc[r].nlargest(k).index.values
+                    for r in self.env.Vhat.index
                 ]
             )
             self.data["K" + str(k)] = [
-                max(self.env.V[x]) - k * self.cost_eval for x in k_best_actions
+                max(self.env.V.loc[i, x]) - k * self.cost_eval
+                for i, x in enumerate(k_best_actions)
             ]
 
         # for each trial
         for s in range(self.env.num_trials):
 
-            vhats = self.env.vhats.loc[s]
+            Vhat = self.env.Vhat.loc[s]
 
             # Empirical distribution of V given Vhat, excluding cost_eval
             cov = sqrt(self.env.tau ** 2 + self.env.sigma ** 2)
+            # TODO: sanity check
             cov_matrix = np.diag(np.repeat(cov, self.env.N))
-            v_dist = np.random.multivariate_normal(vhats, cov_matrix, num_samples)
+            v_dist = np.random.multivariate_normal(Vhat, cov_matrix, num_samples)
 
             # For now, assume agent has to get the value of the first action
 
-            # TODO: just change initialization to vhats[0]?
+            # TODO: just change initialization to Vhat[0]?
 
             Vb = -float("inf")  # best so far
             for i in range(self.env.N + 1):
@@ -100,9 +102,9 @@ class DecisionMaker:
                     break
                 else:
                     # keep evaluating, recurse
-                    V_i = self.env.V[vhats.sort_values(ascending=False).index[i]]
+                    V_i = self.env.V.loc[s, Vhat.sort_values(ascending=False).index[i]]
                     if V_i > Vb:
-                        Vb_index = vhats.sort_values(ascending=False).index[i]
+                        Vb_index = Vhat.sort_values(ascending=False).index[i]
                         Vb = V_i
 
             self.data.loc[s, "num_eval"] = i
@@ -141,7 +143,7 @@ class DecisionMaker:
             color = "black"
             ax2 = ax.twinx()
             ax2.set_ylabel(
-                "Number of actions evaluated by dynamic agent/Rank of the action chosen"
+                "Number of actions evaluated by dynamic agent (black)/Rank of the action chosen (red)"
             )
             ax2.scatter(subset.index, subset["num_eval"], color=color, linewidth=2)
             ax2.tick_params(axis="y", labelcolor=color)
