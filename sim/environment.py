@@ -48,7 +48,7 @@ class DecisionEnvironment:
         # Draw Vh_i from V_i for each trial
         for action in self.Vhat.columns:
             self.V[action] = np.random.multivariate_normal(
-                self.Vhat[action], np.diag(np.repeat(1, num_trials))
+                self.Vhat[action], np.diag(np.repeat(sigma, num_trials))
             )
 
     def plot_action_values(self):

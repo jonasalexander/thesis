@@ -67,13 +67,11 @@ class DecisionMaker:
         # for each trial
         for s in range(self.env.num_trials):
 
-            Vhat = self.env.Vhat.loc[s]
+            Vhats = self.env.Vhat.loc[s]
 
             # Empirical distribution of V given Vhat, excluding cost_eval
-            cov = sqrt(self.env.tau ** 2 + self.env.sigma ** 2)
-            # TODO: sanity check
-            cov_matrix = np.diag(np.repeat(cov, self.env.N))
-            v_dist = np.random.multivariate_normal(Vhat, cov_matrix, num_samples)
+            cov_matrix = np.diag(np.repeat(self.env.sigma, self.env.N))
+            v_dist = np.random.multivariate_normal(Vhats, cov_matrix, num_samples)
 
             # For now, assume agent has to get the value of the first action
 
@@ -88,11 +86,14 @@ class DecisionMaker:
                     Vb_index = 0
                     break
 
-                v_floored_dist = v_dist[:, i:]
+                v_floored_dist = v_dist[:, i:].copy()
                 v_floored_dist[v_floored_dist < Vb] = Vb
-                # After each time period, we've already paid one cost_eval,
-                # sunk cost
-                v_floored_dist -= cost_eval_adjuster[:, : self.env.N - i]
+                # Subtract increasing costs of evaluation for each action
+                # further down the list of Vhats (but not including sunk cost
+                # of actions already evaluated
+                v_floored_dist = (
+                    v_floored_dist - cost_eval_adjuster[:, : self.env.N - i]
+                )
 
                 # utility of continuing to evaluate, based on empirical distr.
                 V_eval = max(v_floored_dist.mean(axis=0)) - self.cost_eval
@@ -102,9 +103,9 @@ class DecisionMaker:
                     break
                 else:
                     # keep evaluating, recurse
-                    V_i = self.env.V.loc[s, Vhat.sort_values(ascending=False).index[i]]
+                    V_i = self.env.V.loc[s, Vhats.sort_values(ascending=False).index[i]]
                     if V_i > Vb:
-                        Vb_index = Vhat.sort_values(ascending=False).index[i]
+                        Vb_index = Vhats.sort_values(ascending=False).index[i]
                         Vb = V_i
 
             self.data.loc[s, "num_eval"] = i
