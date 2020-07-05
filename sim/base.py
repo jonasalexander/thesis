@@ -22,7 +22,7 @@ class BaseGrid:
             raise ValueError("Params has no keys, must have at least one.")
         elif self.num_params > 2:
             raise NotImplementedError(
-                "DeciionEnvironmentGrid currently supports at most 2 parameters."
+                "Grid currently supports at most 2 parameters."
             )
 
         # Cartesian product of parameter values, each row is 1 environment
