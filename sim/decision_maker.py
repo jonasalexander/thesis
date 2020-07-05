@@ -68,6 +68,7 @@ class DecisionMaker:
         for s in range(self.env.num_trials):
 
             Vhats = self.env.Vhat.loc[s]
+            V_sorted = self.env.V.loc[s].sort_values(ascending=False).reset_index()
 
             # Empirical distribution of V given Vhat, excluding cost_eval
             cov_matrix = np.diag(np.repeat(self.env.sigma, self.env.N))
@@ -103,14 +104,20 @@ class DecisionMaker:
                     break
                 else:
                     # keep evaluating, recurse
-                    V_i = self.env.V.loc[s, Vhats.sort_values(ascending=False).index[i]]
+                    V_i = self.env.V.loc[s, Vhats.index[i]]
                     if V_i > Vb:
-                        Vb_index = Vhats.sort_values(ascending=False).index[i]
+                        Vb_index = V_sorted[V_sorted == V_i].index[0]
                         Vb = V_i
 
             self.data.loc[s, "num_eval"] = i
             self.data.loc[s, "dynamic"] = Vb - i * self.cost_eval
             self.data.loc[s, "dynamic_index"] = Vb_index
+
+    def normalize_util(self):
+        normalized_data = self.data.copy()
+        for agent in self.env.k_value_names + ["dynamic"]:
+            normalized_data[agent] -= normalized_data["optimal"]
+        return normalized_data.drop(columns="optimal")
 
     def plot_util(self, limit=50, plot_num_eval=True):
         """Plot utility of different agents for each trial.
@@ -124,14 +131,10 @@ class DecisionMaker:
             on another y axis. Defaults to True.
         """
 
-        normalized_data = self.data.copy()
-        for agent in self.env.k_value_names + ["dynamic"]:
-            normalized_data[agent] -= normalized_data["optimal"]
+        normalized_data = self.normalize_util()
 
         subset = normalized_data.loc[: limit - 1]
-        to_plot = subset.reset_index().drop(
-            columns=["num_eval", "dynamic_index", "optimal"]
-        )
+        to_plot = subset.reset_index().drop(columns=["num_eval", "dynamic_index"])
 
         fig, ax = plt.subplots(figsize=(20, 10))
 
@@ -160,23 +163,30 @@ class DecisionMaker:
 
         plt.show()
 
-    def summary(self, table=False):
+    def summary(self, table=False, normalize=False):
         """Create string summarizing agents' average performance.
 
         Parameters
         ----------
         table : Boolean, optional
             If True, return formatted as table and not string.
+        normalize: Boolean, optional
+            If True, normalize utility so that optimal=0. Defaults to False.
         """
+
+        if normalize:
+            data = self.normalize_util()
+        else:
+            data = self.data
 
         if table:
             df = (
-                pd.DataFrame(self.data.mean(axis=0))
+                pd.DataFrame(data.mean(axis=0))
                 .drop(["num_eval", "dynamic_index"])
                 .rename(columns={0: "mean"})
                 .assign(
                     median=lambda df: np.median(
-                        self.data.drop(columns=["num_eval", "dynamic_index"]), axis=0
+                        data.drop(columns=["num_eval", "dynamic_index"]), axis=0
                     )
                 )
             )
@@ -185,7 +195,7 @@ class DecisionMaker:
         BOLD = "\033[1m"
         END = "\033[0m"
 
-        results = self.data.mean()
+        results = data.mean()
         k_agent_results = "\n".join(
             [
                 col + f": {BOLD} {results[col]:.2f} {END}"
