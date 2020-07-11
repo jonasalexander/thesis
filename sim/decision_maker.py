@@ -68,7 +68,9 @@ class DecisionMaker:
         for s in range(self.env.num_trials):
 
             Vhats = self.env.Vhat.loc[s]
-            V_sorted = self.env.V.loc[s].sort_values(ascending=False).reset_index()
+            V_sorted = (
+                self.env.V.loc[s].sort_values(ascending=False).rename("V").reset_index()
+            )
 
             # Empirical distribution of V given Vhat, excluding cost_eval
             cov_matrix = np.diag(np.repeat(self.env.sigma, self.env.N))
@@ -106,7 +108,7 @@ class DecisionMaker:
                     # keep evaluating, recurse
                     V_i = self.env.V.loc[s, Vhats.index[i]]
                     if V_i > Vb:
-                        Vb_index = V_sorted[V_sorted == V_i].index[0]
+                        Vb_index = V_sorted[V_sorted["V"] == V_i].index[0]
                         Vb = V_i
 
             self.data.loc[s, "num_eval"] = i
