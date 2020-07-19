@@ -29,14 +29,16 @@ def plot_agent_data(agents, normalize=True, limit=50):
 
     to_plot["index"] = to_plot["index"].astype("int")
     to_plot["value"] = to_plot["value"].astype("float")
+    to_plot = to_plot.rename(columns={"index": "trial number"})
 
     g = sns.relplot(
         kind="line",
         data=to_plot,
-        x="index",
+        x="trial number",
         y="value",
         hue="agent",
         col="variable",
+        col_wrap=2,
     )
     g.fig.suptitle("Agent behavior for agents " + ", ".join([agent.name for agent in agents]))
     return g
