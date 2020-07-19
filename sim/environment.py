@@ -9,7 +9,7 @@ from decision_maker import DynamicDecisionMaker
 class DecisionEnvironment:
     """The environment in which the agent acts."""
 
-    def __init__(self, N=12, num_trials=100, sigma=1, mu=0, tau=1, k_values=None):
+    def __init__(self, N=12, num_trials=100, sigma=1, mu=0, tau=1):
         """Initialize the decision environment.
 
         Parameters
@@ -27,9 +27,6 @@ class DecisionEnvironment:
         tau : numeric, optional
             The standard deviation of V_hat, the context-free values for
             different actions (st. deviation from mu).
-        k_values : list of integers, optional
-            Values of K for which to evaluate static agents. Defaults to
-            [1, 2, 3, 4, 5, 7, 10].
         """
 
         self.N = N

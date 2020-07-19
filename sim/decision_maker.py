@@ -65,16 +65,26 @@ class FixedDecisionMaker(BaseDecisionMaker):
 
         indices_evaluated = range(self.num_eval)
         for i in range(self.env.num_trials):
-            Vs_evaluated = self.env.V.loc[i, indices_evaluated].sort_values(
-                ascending=False
+            sorted_V_with_indices = (
+                self.env.V.loc[i]
+                .rename("utility")
+                .sort_values(ascending=False)
+                .reset_index()
+                .rename(columns={"index": "Vhat_index"})
             )
+            Vs_evaluated = (
+                sorted_V_with_indices.loc[
+                    sorted_V_with_indices["Vhat_index"].isin(indices_evaluated)
+                ]
+                .reset_index()
+                .rename(columns={"index": "V_index"})
+            )
+            action_chosen = Vs_evaluated.loc[0]
             self.data.loc[i, "utility"] = (
-                Vs_evaluated.values[0] - self.num_eval * self.cost_eval
+                action_chosen["utility"] - self.num_eval * self.cost_eval
             )
-            self.data.loc[i, "V_index"] = Vs_evaluated.index[0]
-            self.data.loc[i, "Vhat_index"] = self.env.Vhat.loc[i].index[
-                Vs_evaluated.index[0]
-            ]
+            self.data.loc[i, "V_index"] = action_chosen["V_index"]
+            self.data.loc[i, "Vhat_index"] = action_chosen["Vhat_index"]
 
 
 class DynamicDecisionMaker(BaseDecisionMaker):

@@ -41,29 +41,29 @@ def plot_agent_data(agents, normalize=True, limit=50):
     g.fig.suptitle("Agent behavior for agents " + ", ".join([agent.name for agent in agents]))
     return g
 
-def plot_vhat_index_comparison(dynamic_agent, fixed_agent):
+def plot_distribution_comparison(dynamic_agent, fixed_agent, datatype):
     """For the dynamic and fixed agents given, compare the distribution over
-    Vhat_index in trials where num_eval was identical for the dynamic agent.
+    datatype in trials where num_eval was identical for the dynamic agent.
     """
     trials = dynamic_agent.data.loc[dynamic_agent.data["num_eval"] == fixed_agent.num_eval]
-    dynamic_vhat_index = trials["Vhat_index"].value_counts(normalize=True)
-    fixed_vhat_index = fixed_agent.data["Vhat_index"].value_counts(normalize=True)
+    dynamic_values = trials[datatype].value_counts(normalize=True)
+    fixed_values = fixed_agent.data[datatype].value_counts(normalize=True)
 
-    domain = set(fixed_vhat_index.index)
-    domain.update(dynamic_vhat_index.index)
+    domain = set(fixed_values.index)
+    domain.update(dynamic_values.index)
     domain = sorted(list(domain))
 
     ind = np.arange(len(domain))
     width = 0.35
 
     fig, ax = plt.subplots()
-    rects1 = ax.bar(ind - width/2, [dynamic_vhat_index[x]*100 if x in dynamic_vhat_index else 0 for x in domain], width,
+    rects1 = ax.bar(ind - width/2, [dynamic_values[x]*100 if x in dynamic_values else 0 for x in domain], width,
                     label='dynamic')
-    rects2 = ax.bar(ind + width/2, [fixed_vhat_index[x]*100 if x in fixed_vhat_index else 0 for x in domain], width,
+    rects2 = ax.bar(ind + width/2, [fixed_values[x]*100 if x in fixed_values else 0 for x in domain], width,
                     label=fixed_agent.name)
 
-    ax.set_ylabel('Vhat_index %')
-    ax.set_title('Distribution over Vhat_index in trials where num_eval was identical for the dynamic agent')
+    ax.set_ylabel(datatype + ' %')
+    ax.set_title('Distribution over ' + datatype + ' in trials where num_eval was identical for the dynamic agent (n=' + str(len(trials)) + ')')
     ax.set_xticks(ind)
     ax.set_xticklabels([x+1 for x in domain])
     ax.legend()
