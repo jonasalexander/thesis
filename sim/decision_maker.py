@@ -7,7 +7,14 @@ from collections import Counter
 from abc import ABC, abstractmethod
 
 DEFAULT_COST_EVAL = 0.2
-AGENT_COLUMNS = ["num_eval", "utility", "V_index", "Vhat_index"]
+AGENT_COLUMNS = [
+    "num_eval",
+    "utility",
+    "utility_second_best",
+    "gross_utility_last_eval",
+    "V_index",
+    "Vhat_index",
+]
 
 
 class BaseDecisionMaker(ABC):
@@ -41,6 +48,8 @@ class BaseDecisionMaker(ABC):
     def normalize_util(self):
         normalized_data = self.data.copy()
         normalized_data["utility"] -= self.env.optimal
+        normalized_data["utility_second_best"] -= self.env.optimal
+        normalized_data["gross_utility_last_eval"] -= self.env.optimal
         return normalized_data
 
 
@@ -86,6 +95,16 @@ class FixedDecisionMaker(BaseDecisionMaker):
             self.data.loc[i, "V_index"] = action_chosen["V_index"]
             self.data.loc[i, "Vhat_index"] = action_chosen["Vhat_index"]
 
+            if self.num_eval > 1:
+                second_best_action = Vs_evaluated.loc[1]
+                self.data.loc[i, "utility_second_best"] = (
+                    second_best_action["utility"] - self.num_eval * self.cost_eval
+                )
+
+            self.data.loc[i, "gross_utility_last_eval"] = Vs_evaluated.loc[
+                len(Vs_evaluated) - 1, "utility"
+            ]
+
 
 class DynamicDecisionMaker(BaseDecisionMaker):
     """Dynamic decision maker."""
@@ -129,7 +148,9 @@ class DynamicDecisionMaker(BaseDecisionMaker):
 
             # TODO: just change initialization to Vhat[0]?
 
-            Vb = -float("inf")  # best so far
+            Vb_initialization = -float("inf")
+            Vb = Vb_initialization  # best so far
+            Vb2 = Vb_initialization  # second best
             for j in range(self.env.N + 1):
 
                 if j == self.env.N:
@@ -156,7 +177,18 @@ class DynamicDecisionMaker(BaseDecisionMaker):
                 else:
                     # keep evaluating, recurse
                     V_j = self.env.V.loc[i, Vhats.index[j]]
+                    self.data.loc[i, "gross_utility_last_eval"] = V_j
+
+                    # first, check if need to update second best value
+                    # if not the first value we've evaluated and this value is
+                    # better than the current best
+                    if Vb > Vb_initialization and Vb2 < V_j and V_j < Vb:
+                        Vb2 = V_j
+
+                    # check if need to update best value
                     if V_j > Vb:
+                        if Vb > Vb_initialization:
+                            Vb2 = Vb
                         V_index = V_sorted[V_sorted["V"] == V_j].index[0]
                         Vhat_index = j
                         Vb = V_j
@@ -165,3 +197,4 @@ class DynamicDecisionMaker(BaseDecisionMaker):
             self.data.loc[i, "utility"] = Vb - j * self.cost_eval
             self.data.loc[i, "V_index"] = V_index
             self.data.loc[i, "Vhat_index"] = Vhat_index
+            self.data.loc[i, "utility_second_best"] = Vb2 - j * self.cost_eval
