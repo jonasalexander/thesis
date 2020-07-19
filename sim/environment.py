@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from base import BaseGrid
-from decision_maker import DecisionMaker
+from decision_maker import DynamicDecisionMaker
 
 
 class DecisionEnvironment:
@@ -42,9 +42,6 @@ class DecisionEnvironment:
         self.sigma = sigma
         self.tau = tau
 
-        self.k_values = k_values or [1, 2, 3, 4, 5, 7, 10]
-        self.k_value_names = ["K" + str(k) for k in self.k_values]
-
         # each row is a trial
         self.V = pd.DataFrame(index=pd.RangeIndex(num_trials))
 
@@ -53,6 +50,9 @@ class DecisionEnvironment:
             self.V[action] = np.random.multivariate_normal(
                 self.Vhat[action], np.diag(np.repeat(sigma, num_trials))
             )
+
+        # the value of the best action
+        self.optimal = self.V.max(axis=1)
 
     def plot_action_values(self):
         """Plot a number line with the values of the actions."""
@@ -101,7 +101,7 @@ class DecisionEnvironmentGrid(BaseGrid):
         for i, parameters in self.param_settings.iterrows():
             params_dict = {k: v for k, v in zip(parameters.index, parameters.values)}
             env = DecisionEnvironment(**parameters)
-            dm = DecisionMaker(env)
+            dm = DynamicDecisionMaker(env)
             dm.decide()
             df = dm.summary(table=True, normalize=normalize)
             for k, v in params_dict.items():
