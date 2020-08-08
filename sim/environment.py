@@ -51,30 +51,6 @@ class DecisionEnvironment:
         # the value of the best action
         self.optimal = self.V.max(axis=1)
 
-    def plot_action_values(self):
-        """Plot a number line with the values of the actions."""
-        plt.hist(self.V.flatten())
-        plt.xlabel("Value of action")
-        plt.show()
-
-    def plot_vhats(self, action_idx=0):
-        """Plot distribution of vhats for a specific action (across trials).
-
-        Parameters
-        ----------
-        action_idx : integer, optional
-            The index within self.V (column in self.vhats) corresponding to
-            the action for which to show vhats for the different trials
-        """
-        plt.hist(self.vhats[action_idx])
-        plt.xlabel("Vhat")
-        plt.ylabel("Count")
-        plt.title(
-            f"Distribution of vhats for action {action_idx} with average value "
-            f"{np.mean(self.V[:, action_idx]):.2f} (across trials)"
-        )
-        plt.show()
-
 
 class DecisionEnvironmentGrid(BaseGrid):
     def __init__(self, params):

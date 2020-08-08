@@ -49,7 +49,7 @@ def plot_agent_data(agents, normalize=True, limit=50):
     return g
 
 
-def plot_distribution_comparison(dynamic_agent, fixed_agent, datatype):
+def plot_discrete_distribution_comparison(dynamic_agent, fixed_agent, datatype):
     """For the dynamic and fixed agents given, compare the distribution over
     datatype in trials where num_eval was identical for the dynamic agent.
     """
@@ -93,6 +93,19 @@ def plot_distribution_comparison(dynamic_agent, fixed_agent, datatype):
     ax.legend()
 
     fig.tight_layout()
+    plt.show()
+
+
+def plot_continuous_distribution_comparison(dynamic_agent, fixed_agent, datatype):
+    """Same as plot_discrete_distribution_comparison except uses bucketing
+    by matplotlib, not bucketing by unique value with pandas."""
+    plt.hist(
+        [dynamic_agent.data[datatype], fixed_agent.data[datatype]],
+        histtype="bar",
+        label=[dynamic_agent.name, fixed_agent.name],
+    )
+    plt.legend()
+    plt.title("Distribution over " + datatype)
     plt.show()
 
 
