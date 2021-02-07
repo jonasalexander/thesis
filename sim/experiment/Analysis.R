@@ -1,7 +1,12 @@
 require(dplyr)
-require(dfidx)
 require(glm)
 require(ggplot2)
+require(jtools)
+require(effects)
+require(survival)
+require(lme4)
+
+# DATA
 
 mode <- "EXPERIMENT"
 N <- 1000
@@ -13,7 +18,7 @@ if (mode == "EXPERIMENT") {
   df <- raw_df %>%
     mutate(last = !as.logical(raw_df$did_continue_eval)) %>%
     mutate(subject.id = as.numeric(factor(raw_df$subject))) %>%
-    select(last, subject.id, s2_value) %>%
+    select(last, subject.id, s2_value, order) %>%
     rename(value = s2_value)
 } else if (mode == "SIMULATE RANDOM") {
   mean_num_drawn <- length(df$subject.id)/length(unique(df$subject.id))
@@ -35,35 +40,92 @@ if (mode == "EXPERIMENT") {
   
 }
 
+# SIMPLE
 
 summary(glm(last ~ log(value) + factor(subject.id), data=df, family="binomial"))
-
 
 df.avg <- df %>% group_by(subject.id, last) %>% summarise_each(funs(mean))
 
 # Can exclude people with only one entry or make them have same value for both cases
 one_entry <- (count(df.avg, subject.id) %>% filter(n == 1))$subject.id
-df.avg[df.avg$subject.id %in% one_entry,]
 df.avg.include <- rbind(df.avg, df.avg[df.avg$subject.id %in% one_entry,] %>% mutate(last = FALSE))
 ggplot(df.avg.include, aes(value, fill=last)) + geom_density(alpha = 0.2)
 
 df.avg.exclude <- df.avg[!df.avg$subject.id %in% one_entry,]
 ggplot(df.avg.exclude, aes(value, fill=last)) + geom_density(alpha = 0.2)
 
-
 value_increase_last <- df.avg.exclude$value[df.avg.exclude$last == TRUE] - df.avg.exclude$value[df.avg.exclude$last == FALSE]
+hist(value_increase_last) # can we turn this into a test statistic?
+
+# LOGIT
+
+# Logit regression without individual-level analysis
+# see https://www.rensvandeschoot.com/tutorials/discrete-time-survival/
+
+df.hazard <- df %>%
+  mutate(event = as.integer(df$last)) %>%
+  group_by(subject.id) %>%
+  mutate(time = order) %>%
+  ungroup() %>%
+  mutate(censored = as.integer(time == 12)) %>%
+  select(subject.id, value, event, time, censored) 
+
+df.hazard %>%
+  group_by(value) %>%
+  summarise(event = sum(event),
+            total = n()) %>%
+  mutate(hazard = event/total) %>%
+  ggplot(aes(x = value, y = log(hazard/(1-hazard)))) +
+  geom_point() +
+  geom_smooth()
+
+df.hazard %>%
+  group_by(time) %>%
+  summarise(event = sum(event),
+            total = n()) %>%
+  mutate(hazard = event/total) %>%
+  ggplot(aes(x = time, y = log(hazard/(1-hazard)))) +
+  geom_point() +
+  geom_smooth()
+
+model.time <- glm(formula = event ~ time,
+                               family = binomial(link = "logit"),
+                               data = df.hazard)
+summary(model.time)
+
+df.hazard %>%
+  group_by(value) %>%
+  summarise(event = sum(event),
+            total = n()) %>%
+  mutate(hazard = event/total) %>%
+  ggplot(aes(x = value, y = log(hazard/(1-hazard)))) +
+  geom_point() +
+  geom_smooth()
+
+model.value <- glm(formula = event ~ time + value,
+                           family = binomial(link = "logit"),
+                           data = df.hazard)
+
+summary(model.value)
+summ(model.value, exp = T)
+plot_summs(model.value, exp = T)
+plot(allEffects(model.value))
+
+# Logit Multi-level discrete-time survival analysis
+# see https://www.rensvandeschoot.com/tutorials/discrete-time-survival/
+model.multi <- glmer(formula = event ~ time + value + (1|subject.id),
+                     family = binomial(logit),
+                     data = df.hazard)
+coef(summary(model.multi))
+
+# df.hazard.residual <- df.hazard %>% mutate(residual = resid(model.multi))
+
+# SURVIVAL
+
+cox <- coxph(Surv(time, event) ~ value, data = df.hazard)
+cox.fit <- survfit(cox)
+autoplot(cox.fit)
 
 
 
-df.hazard <- df %>% mutate(event = as.integer(df$last)) %>% mutate(exit = ) %>% select(subject.id, value, event, exit) %>% 
 
-
-
-# dflogit <- df %>% mlogit.data(choice = "last", shape = "long", id.var = "subject.id", alt.var = "option.id", chid.var = "subject.id")
-# # dflogit <- df %>% dfidx(choice = "last", idx=c("subject.id", "option.id"))
-# 
-# m.last <- mlogit(last ~ s2_value | -1 + option.id, dflogit, panel = T,
-#                   rpar = c(s2_value = "n"), halton = NA, R = 1000, tol = .001)
-# 
-# #m.choice.null = mlogit(chosen ~ s2_value | -1 + word_ind, df, panel = T,
-# #                       rpar = c(s2_value = "n"), halton = NA, R = 1000, tol = .001)
