@@ -42,20 +42,25 @@ if (mode == "EXPERIMENT") {
 
 # SIMPLE
 
-summary(glm(last ~ log(value) + factor(subject.id), data=df, family="binomial"))
+## Want to use (1|subject.id) instead of full factor(subject.id) because
+## the latter would treat subjects as having been randomly sampled which means that
+## regressing to the mean makes sense, which is not the case for non-randomly
+## sampled. Also something about the structure of the covariance matrix?
 
-df.avg <- df %>% group_by(subject.id, last) %>% summarise_each(funs(mean))
+model.logvalue <- glmer(last ~ log(value) + (1|subject.id), data=df, family="binomial")
+summary(model.logvalue)
 
-# Can exclude people with only one entry or make them have same value for both cases
+# Has significant result, but is more robust to compare to baseline model that doesn't get value
+# -> don't interpret p-values but do model comparison using anova
+model.baseline <- glmer(last ~ (1|subject.id), data=df, family="binomial")
+anova(model.logvalue, model.baseline)
+
+# model.logvalue has variance 0 on the random effects, which is a problem
+# try excluding subjects that stop after the first item:
 one_entry <- (count(df.avg, subject.id) %>% filter(n == 1))$subject.id
-df.avg.include <- rbind(df.avg, df.avg[df.avg$subject.id %in% one_entry,] %>% mutate(last = FALSE))
-ggplot(df.avg.include, aes(value, fill=last)) + geom_density(alpha = 0.2)
+df.exclude <- df[!df$subject.id %in% one_entry,]
+summary(glmer(last ~ log(value) + (1|subject.id), data=df.exclude, family="binomial"))
 
-df.avg.exclude <- df.avg[!df.avg$subject.id %in% one_entry,]
-ggplot(df.avg.exclude, aes(value, fill=last)) + geom_density(alpha = 0.2)
-
-value_increase_last <- df.avg.exclude$value[df.avg.exclude$last == TRUE] - df.avg.exclude$value[df.avg.exclude$last == FALSE]
-hist(value_increase_last) # can we turn this into a test statistic?
 
 # LOGIT
 
@@ -67,8 +72,7 @@ df.hazard <- df %>%
   group_by(subject.id) %>%
   mutate(time = order) %>%
   ungroup() %>%
-  mutate(censored = as.integer(time == 12)) %>%
-  select(subject.id, value, event, time, censored) 
+  select(subject.id, value, event, time) 
 
 df.hazard %>%
   group_by(value) %>%
@@ -109,7 +113,6 @@ model.value <- glm(formula = event ~ time + value,
 summary(model.value)
 summ(model.value, exp = T)
 plot_summs(model.value, exp = T)
-plot(allEffects(model.value))
 
 # Logit Multi-level discrete-time survival analysis
 # see https://www.rensvandeschoot.com/tutorials/discrete-time-survival/
@@ -118,14 +121,39 @@ model.multi <- glmer(formula = event ~ time + value + (1|subject.id),
                      data = df.hazard)
 coef(summary(model.multi))
 
-# df.hazard.residual <- df.hazard %>% mutate(residual = resid(model.multi))
 
 # SURVIVAL
+df.hazard <- df %>%
+  mutate(event = as.integer(df$last)) %>%
+  group_by(subject.id) %>%
+  mutate(time = order) %>%
+  ungroup() %>%
+  select(subject.id, value, event, time) 
 
-cox <- coxph(Surv(time, event) ~ value, data = df.hazard)
-cox.fit <- survfit(cox)
-autoplot(cox.fit)
+model.coxph <- coxph(Surv(time,event)~ log(value), df.hazard, cluster=subject.id)
+model.coxph
+# This already includes time, can't have it as an additional variable on the right hand side
+# coxph(Surv(time,event)~ log(value) + time, df.hazard, cluster=subject.id, iter.max=200)
+zph <- cox.zph(model.coxph)
+zph
 
+plot(zph[1],lwd=2)
+abline(0,0, col=1,lty=3,lwd=2)
+abline(h= model.coxph$coef[1], col=3, lwd=2, lty=2) > legend("topleft",
+                                                        legend=c('Reference line for null effect', "Average hazard over time", "Time-varying hazard"),
+                                                        lty=c(3,2,1), col=c(1,3,1), lwd=2)
 
+# COMPARING AVGs
+df.avg <- df %>% group_by(subject.id, last) %>% summarise_each(funs(mean))
 
+# Can exclude people with only one entry or make them have same value for both cases
+one_entry <- (count(df.avg, subject.id) %>% filter(n == 1))$subject.id
+df.avg.include <- rbind(df.avg, df.avg[df.avg$subject.id %in% one_entry,] %>% mutate(last = FALSE))
+ggplot(df.avg.include, aes(value, fill=last)) + geom_density(alpha = 0.2)
+
+df.avg.exclude <- df.avg[!df.avg$subject.id %in% one_entry,]
+ggplot(df.avg.exclude, aes(value, fill=last)) + geom_density(alpha = 0.2)
+
+value_increase_last <- df.avg.exclude$value[df.avg.exclude$last == TRUE] - df.avg.exclude$value[df.avg.exclude$last == FALSE]
+hist(value_increase_last) # can we turn this into a test statistic?
 
