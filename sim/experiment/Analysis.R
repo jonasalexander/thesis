@@ -1,10 +1,6 @@
 require(dplyr)
-require(glm)
-require(ggplot2)
-require(jtools)
-require(effects)
 require(survival)
-require(lme4)
+require(survminer)
 
 # DATA
 
@@ -40,100 +36,21 @@ if (mode == "EXPERIMENT") {
   
 }
 
-# SIMPLE
-
-## Want to use (1|subject.id) instead of full factor(subject.id) because
-## the latter would treat subjects as having been randomly sampled which means that
-## regressing to the mean makes sense, which is not the case for non-randomly
-## sampled. Also something about the structure of the covariance matrix?
-
-model.logvalue <- glmer(last ~ log(value) + (1|subject.id), data=df, family="binomial")
-summary(model.logvalue)
-
-# Has significant result, but is more robust to compare to baseline model that doesn't get value
-# -> don't interpret p-values but do model comparison using anova
-model.baseline <- glmer(last ~ (1|subject.id), data=df, family="binomial")
-anova(model.logvalue, model.baseline)
-
-# model.logvalue has variance 0 on the random effects, which is a problem
-# try excluding subjects that stop after the first item:
-one_entry <- (count(df.avg, subject.id) %>% filter(n == 1))$subject.id
-df.exclude <- df[!df$subject.id %in% one_entry,]
-summary(glmer(last ~ log(value) + (1|subject.id), data=df.exclude, family="binomial"))
-
-
-# LOGIT
-
-# Logit regression without individual-level analysis
-# see https://www.rensvandeschoot.com/tutorials/discrete-time-survival/
-
+# SURVIVAL ANALYSIS
 df.hazard <- df %>%
   mutate(event = as.integer(df$last)) %>%
   group_by(subject.id) %>%
   mutate(time = order) %>%
   ungroup() %>%
-  select(subject.id, value, event, time) 
+  select(subject.id, value, event, time) %>%
+  mutate(value.centered = value - mean(df$value))
 
-df.hazard %>%
-  group_by(value) %>%
-  summarise(event = sum(event),
-            total = n()) %>%
-  mutate(hazard = event/total) %>%
-  ggplot(aes(x = value, y = log(hazard/(1-hazard)))) +
-  geom_point() +
-  geom_smooth()
+# Use this for time-varying analysis
+model.coxph <- coxph(Surv(time,event) ~ value, data = df.hazard)
+summary(model.coxph)
+ggsurvplot(survfit(model.coxph, data=df.hazard),
+           ggtheme = theme_minimal())
 
-df.hazard %>%
-  group_by(time) %>%
-  summarise(event = sum(event),
-            total = n()) %>%
-  mutate(hazard = event/total) %>%
-  ggplot(aes(x = time, y = log(hazard/(1-hazard)))) +
-  geom_point() +
-  geom_smooth()
-
-model.time <- glm(formula = event ~ time,
-                               family = binomial(link = "logit"),
-                               data = df.hazard)
-summary(model.time)
-
-df.hazard %>%
-  group_by(value) %>%
-  summarise(event = sum(event),
-            total = n()) %>%
-  mutate(hazard = event/total) %>%
-  ggplot(aes(x = value, y = log(hazard/(1-hazard)))) +
-  geom_point() +
-  geom_smooth()
-
-model.value <- glm(formula = event ~ time + value,
-                           family = binomial(link = "logit"),
-                           data = df.hazard)
-
-summary(model.value)
-summ(model.value, exp = T)
-plot_summs(model.value, exp = T)
-
-# Logit Multi-level discrete-time survival analysis
-# see https://www.rensvandeschoot.com/tutorials/discrete-time-survival/
-model.multi <- glmer(formula = event ~ time + value + (1|subject.id),
-                     family = binomial(logit),
-                     data = df.hazard)
-coef(summary(model.multi))
-
-
-# SURVIVAL
-df.hazard <- df %>%
-  mutate(event = as.integer(df$last)) %>%
-  group_by(subject.id) %>%
-  mutate(time = order) %>%
-  ungroup() %>%
-  select(subject.id, value, event, time) 
-
-model.coxph <- coxph(Surv(time,event)~ log(value), df.hazard, cluster=subject.id)
-model.coxph
-# This already includes time, can't have it as an additional variable on the right hand side
-# coxph(Surv(time,event)~ log(value) + time, df.hazard, cluster=subject.id, iter.max=200)
 zph <- cox.zph(model.coxph)
 zph
 
@@ -143,17 +60,28 @@ abline(h= model.coxph$coef[1], col=3, lwd=2, lty=2) > legend("topleft",
                                                         legend=c('Reference line for null effect', "Average hazard over time", "Time-varying hazard"),
                                                         lty=c(3,2,1), col=c(1,3,1), lwd=2)
 
-# COMPARING AVGs
-df.avg <- df %>% group_by(subject.id, last) %>% summarise_each(funs(mean))
+# Unfortunately does not look like the ratio between these stays constant
+# time coefficient is messing with us
+grouped <- aggregate(event ~ time + value, df.hazard, mean)
+grouped %>% ggplot(aes(x=time, y=event, color=as.character(value))) + geom_line()
 
-# Can exclude people with only one entry or make them have same value for both cases
-one_entry <- (count(df.avg, subject.id) %>% filter(n == 1))$subject.id
-df.avg.include <- rbind(df.avg, df.avg[df.avg$subject.id %in% one_entry,] %>% mutate(last = FALSE))
-ggplot(df.avg.include, aes(value, fill=last)) + geom_density(alpha = 0.2)
 
-df.avg.exclude <- df.avg[!df.avg$subject.id %in% one_entry,]
-ggplot(df.avg.exclude, aes(value, fill=last)) + geom_density(alpha = 0.2)
 
-value_increase_last <- df.avg.exclude$value[df.avg.exclude$last == TRUE] - df.avg.exclude$value[df.avg.exclude$last == FALSE]
-hist(value_increase_last) # can we turn this into a test statistic?
+
+
+# Use this for non-time-varying analyses (log-rank test)
+model.survfit <- survfit(Surv(time,event) ~ value, df.hazard)
+model.survfit
+summary(model.survfit)$table
+ggsurvplot(model.survfit,
+           pval = TRUE, conf.int = TRUE,
+           risk.table = TRUE, # Add risk table
+           risk.table.col = "strata", # Change risk table color by groups
+           linetype = "strata", # Change line type by groups
+           surv.median.line = "hv", # Specify median survival
+           ggtheme = theme_bw())
+
+model.survdiff <- survdiff(Surv(time, event) ~ value, df.hazard)
+model.survdiff
+
 
