@@ -68,6 +68,14 @@ class DecisionEnvironment:
             .sort_values(by=["trial", "action index"])
             .reset_index(drop=True)
         )
+        vhat_data = (
+            self.Vhat.reset_index()
+            .rename(columns={"index": "trial"})
+            .melt(value_name="Vhat", id_vars="trial", var_name="action index")
+            .sort_values(by=["trial", "action index"])
+            .reset_index(drop=True)
+        )
+        self.data = self.data.join(vhat_data, rsuffix="_todrop").drop(columns=["trial_todrop", "action index_todrop"])
 
         self.data["Vb"] = 0
         for idx in self.data.index:
@@ -77,9 +85,15 @@ class DecisionEnvironment:
                 self.data.loc[idx, "Vb"] = max(V.loc[:idx])
 
         self.data["gain"] = np.NaN
+        self.data["Vhat_next"] = np.NaN
         for trial in self.data["trial"].unique():
             trial_idx = self.data["trial"] == trial
-            self.data.loc[trial_idx, "gain"] = np.roll(self.data.loc[trial_idx, "Vb"].diff(), shift=-1) - cost_eval
+            self.data.loc[trial_idx, "gain"] = (
+                np.roll(self.data.loc[trial_idx, "Vb"].diff(), shift=-1) - cost_eval
+            )
+            vhat_next = np.roll(self.data.loc[trial_idx, "Vhat"], shift=-1)
+            vhat_next[-1] = np.NaN
+            self.data.loc[trial_idx, "Vhat_next"] = vhat_next
 
     def plot_gain(self, metric, cost_eval=None):
         """Plot gain (net utility) as a function of a specific environmental variable.
@@ -108,7 +122,7 @@ class DecisionEnvironment:
                 range(self.N), self.data.groupby("action index").agg("mean")["gain"]
             )
             plt.plot(range(self.N), self.N * [0], color="r")
-            #plt.show()
+            # plt.show()
 
         elif metric == "Vb":
             # bin by Vb and then for each bin, calculate mean gain
@@ -125,10 +139,19 @@ class DecisionEnvironment:
             plt.show()
 
         elif metric == "Vhat_next":
-            raise NotImplementedError(
-                "Vhat_next gain function plotting (and data tbh) not implemented yet."
-            )
+            cutoffs = np.linspace(self.data["Vhat_next"].min(), self.data["Vhat_next"].max())
+            bins = pd.cut(self.data["Vhat_next"], cutoffs)
+            Vb_values = self.data.groupby(bins)["gain"].agg("mean")
 
+            plt.figure(figsize=(20, 10))
+            plt.scatter(cutoffs[:-1], Vb_values.values)
+            plt.xticks(cutoffs[:-1:2])
+            plt.xlabel("context-free value of next best action")
+            plt.ylabel("net gain")
+            plt.show()
+
+        else:
+            raise NotImplementedError(f"Unexpected metric type {metric}")
 
 
 class DecisionEnvironmentGrid(BaseGrid):
