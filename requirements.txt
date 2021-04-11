@@ -1,0 +1,4 @@
+jupyterlab==3.0.*
+pandas==1.2.*
+lifelines==0.25.*
+seaborn==0.11.*
