@@ -3,14 +3,22 @@ require(survival)
 require(survminer)
 
 # DATA
-raw_df <- read.csv("~/Desktop/thesis/experiment/data/Adams_experiment_cleaned_filtered.csv")
+raw_df <- read.csv("~/Desktop/thesis/data/Adams_experiment_cleaned_filtered.csv")
 months <- raw_df %>% group_by(word, s2_value) %>% summarise()
 
+df <- raw_df %>%
+  mutate(last = !as.logical(raw_df$did_continue_eval)) %>%
+  mutate(subject.id = as.numeric(factor(raw_df$subject))) %>%
+  select(last, subject.id, s2_value, order) %>%
+  rename(value = s2_value)
 
+plot(aggregate(last ~ order, df, mean))
 
 # TODO: Get simulated data created in Python
-filename <- "~/Desktop/thesis/experiment/data/Adams_experiment_cleaned_all.csv"
-df <- read.csv(filename)
+filename <- "~/Desktop/thesis/data/generated_random.csv"
+df <- read.csv(filename) %>% mutate(last = as.logical(last))
+
+plot(aggregate(last ~ order, df, mean))
 
 # COX
 df.hazard <- df %>%
