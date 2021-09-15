@@ -21,9 +21,7 @@ class BaseGrid:
         if self.num_params == 0:
             raise ValueError("Params has no keys, must have at least one.")
         elif self.num_params > 2:
-            raise NotImplementedError(
-                "Grid currently supports at most 2 parameters."
-            )
+            raise NotImplementedError("Grid currently supports at most 2 parameters.")
 
         # Cartesian product of parameter values, each row is 1 environment
         self.param_settings = pd.DataFrame({"key": [1]})

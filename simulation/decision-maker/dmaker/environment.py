@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from base import BaseGrid
-from decision_maker import DynamicDecisionMaker, DEFAULT_COST_EVAL
+from dmaker.base import BaseGrid
+from dmaker.decision_maker import DynamicDecisionMaker, DEFAULT_COST_EVAL
 
 
 class DecisionEnvironment:
@@ -75,7 +75,9 @@ class DecisionEnvironment:
             .sort_values(by=["trial", "action index"])
             .reset_index(drop=True)
         )
-        self.data = self.data.join(vhat_data, rsuffix="_todrop").drop(columns=["trial_todrop", "action index_todrop"])
+        self.data = self.data.join(vhat_data, rsuffix="_todrop").drop(
+            columns=["trial_todrop", "action index_todrop"]
+        )
 
         self.data["Vb"] = 0
         for idx in self.data.index:
@@ -139,7 +141,9 @@ class DecisionEnvironment:
             plt.show()
 
         elif metric == "Vhat_next":
-            cutoffs = np.linspace(self.data["Vhat_next"].min(), self.data["Vhat_next"].max())
+            cutoffs = np.linspace(
+                self.data["Vhat_next"].min(), self.data["Vhat_next"].max()
+            )
             bins = pd.cut(self.data["Vhat_next"], cutoffs)
             Vb_values = self.data.groupby(bins)["gain"].agg("mean")
 

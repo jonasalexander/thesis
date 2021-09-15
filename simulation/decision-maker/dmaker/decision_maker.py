@@ -15,6 +15,7 @@ AGENT_COLUMNS = [
     "V_index",
     "Vhat_index",
 ]
+EXPERIMENT_COLUMNS = ["subject_id", "last", "value", "order"]
 
 
 class BaseDecisionMaker(ABC):
@@ -38,8 +39,11 @@ class BaseDecisionMaker(ABC):
         Vhat_index: rank of the action chosen among Vhat (order of consideration)
         """
         self.data = pd.DataFrame(
-            index=pd.RangeIndex(self.env.num_trials), columns=AGENT_COLUMNS,
+            index=pd.RangeIndex(self.env.num_trials),
+            columns=AGENT_COLUMNS,
         )
+
+        self.experiment_data = pd.DataFrame(columns=EXPERIMENT_COLUMNS)
 
     @abstractmethod
     def decide(self):
@@ -151,6 +155,7 @@ class DynamicDecisionMaker(BaseDecisionMaker):
             Vb_initialization = -float("inf")
             Vb = Vb_initialization  # best so far
             Vb2 = Vb_initialization  # second best
+            V_j = None  # initialize to empty
             for j in range(self.env.N + 1):
 
                 if j == self.env.N:
@@ -173,8 +178,18 @@ class DynamicDecisionMaker(BaseDecisionMaker):
 
                 if Vb > V_eval:
                     # Vb is better than expectation of continuing to evaluate
+                    self.experiment_data = self.experiment_data.append(
+                        {"subject_id": i, "last": True, "value": V_j, "order": j},
+                        ignore_index=True,
+                    )
                     break
                 else:
+                    if not V_j is None:  # checks that we aren't on the first iteration
+                        self.experiment_data = self.experiment_data.append(
+                            {"subject_id": i, "last": False, "value": V_j, "order": j},
+                            ignore_index=True,
+                        )
+
                     # keep evaluating, recurse
                     V_j = self.env.V.loc[i, Vhats.index[j]]
                     self.data.loc[i, "gross_utility_last_eval"] = V_j

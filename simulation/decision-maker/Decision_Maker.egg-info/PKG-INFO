@@ -1,4 +1,4 @@
-Metadata-Version: 1.0
+Metadata-Version: 2.1
 Name: Decision-Maker
 Version: 0.1.0
 Summary: Object oriented approach to simulating decision making under uncertainty
@@ -6,8 +6,11 @@ Home-page: UNKNOWN
 Author: Jonas Nelle
 Author-email: jonas.a.nelle@gmail.com
 License: LICENSE.txt
-Description: # Decision Maker Package
-        
-        
-        
 Platform: UNKNOWN
+License-File: LICENSE.txt
+
+# Decision Maker Package
+
+
+
+
