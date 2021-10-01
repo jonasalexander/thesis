@@ -1,10 +1,11 @@
-import pandas as pd
-import numpy as np
-from math import sqrt
-import seaborn as sns
-import matplotlib.pyplot as plt
-from collections import Counter
 from abc import ABC, abstractmethod
+from collections import Counter
+from math import sqrt
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 
 DEFAULT_COST_EVAL = 0.2
 AGENT_COLUMNS = [
@@ -15,7 +16,7 @@ AGENT_COLUMNS = [
     "V_index",
     "Vhat_index",
 ]
-EXPERIMENT_COLUMNS = ["subject_id", "last", "value", "order"]
+EXPERIMENT_COLUMNS = ["subject.id", "last", "value", "order"]
 
 
 class BaseDecisionMaker(ABC):
@@ -144,24 +145,24 @@ class DynamicDecisionMaker(BaseDecisionMaker):
                 self.env.V.loc[i].sort_values(ascending=False).rename("V").reset_index()
             )
 
-            # Empirical distribution of V given Vhat, excluding cost_eval
+            # Agent's simulated distribution of V given Vhat, excluding cost_eval
             cov_matrix = np.diag(np.repeat(self.env.sigma, self.env.N))
             v_dist = np.random.multivariate_normal(Vhats, cov_matrix, self.num_samples)
 
-            # For now, assume agent has to get the value of the first action
-
-            # TODO: just change initialization to Vhat[0]?
-
+            # Agent has to get the value of the first action
             Vb_initialization = -float("inf")
             Vb = Vb_initialization  # best so far
             Vb2 = Vb_initialization  # second best
-            V_j = None  # initialize to empty
+            V_prev = None  # initialize to empty
             for j in range(self.env.N + 1):
-
                 if j == self.env.N:
                     # have evaluated all the actions
-                    # know the agent will be able to get the best actions
+                    # know the agent will be able to get the best action
                     V_index = 0
+                    self.experiment_data = self.experiment_data.append(
+                        {"subject.id": i, "last": True, "value": V_prev, "order": j},
+                        ignore_index=True,
+                    )
                     break
 
                 v_floored_dist = v_dist[:, j:].copy()
@@ -173,42 +174,52 @@ class DynamicDecisionMaker(BaseDecisionMaker):
                     v_floored_dist - cost_eval_adjuster[:, : self.env.N - j]
                 )
 
-                # utility of continuing to evaluate, based on empirical distr.
+                # Utility of continuing to evaluate, based on simulated distribution
+                # Take the mean over num_samples
+                # and then take the max over evaluating 1, 2, ... more actions
                 V_eval = max(v_floored_dist.mean(axis=0)) - self.cost_eval
 
                 if Vb > V_eval:
                     # Vb is better than expectation of continuing to evaluate
+                    # not j + 1 because actually want to refer to the previous iteration
                     self.experiment_data = self.experiment_data.append(
-                        {"subject_id": i, "last": True, "value": V_j, "order": j},
+                        {"subject.id": i, "last": True, "value": V_prev, "order": j},
                         ignore_index=True,
                     )
                     break
                 else:
-                    if not V_j is None:  # checks that we aren't on the first iteration
+                    if (
+                        not V_prev is None
+                    ):  # checks that we aren't on the first iteration
+                        # not j + 1 because actually want to refer to the previous iteration
                         self.experiment_data = self.experiment_data.append(
-                            {"subject_id": i, "last": False, "value": V_j, "order": j},
+                            {
+                                "subject.id": i,
+                                "last": False,
+                                "value": V_prev,
+                                "order": j,
+                            },
                             ignore_index=True,
                         )
 
-                    # keep evaluating, recurse
-                    V_j = self.env.V.loc[i, Vhats.index[j]]
-                    self.data.loc[i, "gross_utility_last_eval"] = V_j
+                    # Evaluate current action and recurse
+                    V_prev = self.env.V.loc[i, Vhats.index[j]]
+                    self.data.loc[i, "gross_utility_last_eval"] = V_prev
 
-                    # first, check if need to update second best value
-                    # if not the first value we've evaluated and this value is
-                    # better than the current best
-                    if Vb > Vb_initialization and Vb2 < V_j and V_j < Vb:
-                        Vb2 = V_j
-
-                    # check if need to update best value
-                    if V_j > Vb:
-                        if Vb > Vb_initialization:
+                    if V_prev < Vb:
+                        # Don't need to update Vb
+                        # But may need to update second best value
+                        # Also check that this is not the first value we've evaluated
+                        if j > 0 and Vb2 < V_prev:
+                            Vb2 = V_prev
+                    else:
+                        if j > 0:
                             Vb2 = Vb
-                        V_index = V_sorted[V_sorted["V"] == V_j].index[0]
+                        V_index = V_sorted[V_sorted["V"] == V_prev].index[0]
                         Vhat_index = j
-                        Vb = V_j
+                        Vb = V_prev
 
-            self.data.loc[i, "num_eval"] = j
+            self.data.loc[i, "num_eval"] = j + 1
             self.data.loc[i, "utility"] = Vb - j * self.cost_eval
             self.data.loc[i, "V_index"] = V_index
             self.data.loc[i, "Vhat_index"] = Vhat_index

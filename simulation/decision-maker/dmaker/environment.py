@@ -1,9 +1,9 @@
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 from dmaker.base import BaseGrid
-from dmaker.decision_maker import DynamicDecisionMaker, DEFAULT_COST_EVAL
+from dmaker.decision_maker import DEFAULT_COST_EVAL, DynamicDecisionMaker
 
 
 class DecisionEnvironment:
@@ -84,7 +84,7 @@ class DecisionEnvironment:
             trial = self.data.loc[idx, "trial"]
             V = self.data.loc[self.data["trial"] == trial, "V"]
             for action_idx in V.index:
-                self.data.loc[idx, "Vb"] = max(V.loc[:idx])
+                self.data.loc[action_idx, "Vb"] = max(V.loc[:action_idx])
 
         self.data["gain"] = np.NaN
         self.data["Vhat_next"] = np.NaN
