@@ -29,7 +29,7 @@ def generate_data(n: int, options: List[any], stop_proba_func: List[float]):
     def random_stopped(df):
         stop_proba = stop_proba_func(df)
         df["last"] = [
-            True if x == 1 else False for x in np.random.binomial([1] * 12, stop_proba)
+            True if x == 1 else False for x in np.random.binomial(1, stop_proba)
         ]
         for i, x in enumerate(df["last"]):
             if x:
