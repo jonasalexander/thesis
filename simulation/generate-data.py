@@ -12,26 +12,25 @@ def main(n: int, random: bool):
 
     if random:
 
-        # random based on real-life average stopping probabilities based on number evaluated so far
-        raw_df = pd.read_csv(
-            "~/Desktop/thesis/data/Adams_experiment_cleaned_filtered.csv"
-        )
-        raw_df["last"] = ~raw_df["did_continue_eval"]
+        # random based on average stopping probabilities of model
+        env = DecisionEnvironment(N=12, num_trials=n, sigma=100, mu=13, tau=8)
+        dm = DynamicDecisionMaker(env=env, num_samples=1000, cost_eval=1)
+        dm.decide()
 
-        options = raw_df.groupby("word").agg({"s2_value": "mean"}).reset_index()
-        empirical_stop_proba = (
-            raw_df.groupby("order").agg({"last": "mean"})["last"].values
-        )
+        dm.experiment_data["last"] = dm.experiment_data["last"].astype(int)
+        empirical_stop_proba = dm.experiment_data.groupby("order").agg({"last": "mean"})
 
         def stop_proba_random(_):
             return empirical_stop_proba
+
+        options = [x * 2 + 1 for x in range(13)]
 
         random = generate_data(n, options, stop_proba_random)
         random.to_csv(f"~/Desktop/thesis/data/generated_random_n={n}.csv")
 
     else:
-        env = DecisionEnvironment(N=12, num_trials=n, sigma=0, mu=13, tau=8)
-        dm = DynamicDecisionMaker(env=env, num_samples=1000, cost_eval=0.2)
+        env = DecisionEnvironment(N=12, num_trials=n, sigma=100, mu=13, tau=8)
+        dm = DynamicDecisionMaker(env=env, num_samples=1000, cost_eval=1)
         dm.decide()
         dm.experiment_data.to_csv(
             f"~/Desktop/thesis/data/generated_gaussian_optimal_n={n}.csv"
