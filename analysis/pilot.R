@@ -42,3 +42,10 @@ word_counts <- as.data.frame(table(combined_word_counts$rank)) %>% rename(rank =
 
 plot(word_counts$rank, word_counts$percentage, ylim=c(0, 100), xlab="rank", ylab="recall frequency")
 word_counts
+
+## Potentially exclude
+
+ay.long.by_subject <- ay.long %>% count(workerId) %>% mutate(fraction=n/12)
+bz.long.by_subject <- bz.long %>% count(workerId) %>% mutate(fraction=n/12)
+sum(bz.long.by_subject$fraction < 0.5) + sum(ay.long.by_subject < 0.5)
+bz.long.by_subject[bz.long.by_subject$fraction < 0.5,]
