@@ -15,10 +15,11 @@ df <- raw_df %>%
 plot(aggregate(last ~ order, df, mean))
 
 # TODO: Get simulated data created in Python
-filename <- "~/Desktop/thesis/data/generated_random.csv"
+filename <- "~/Desktop/thesis/data/thesis_sample_clean_wide.csv"
 df <- read.csv(filename) %>% mutate(last = as.logical(last))
 
 plot(aggregate(last ~ order, df, mean))
+plot(aggregate(last ~ value, df, mean)) + abline(lm(last ~ value, df))
 
 # COX
 df.hazard <- df %>%
