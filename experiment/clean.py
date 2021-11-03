@@ -1,15 +1,53 @@
 import numpy as np
 import pandas as pd
 
-df = pd.read_csv("../data/thesis_sample.csv")
+df = pd.read_csv("../data/thesis_sample_both_conditions.csv")
+
+words_a = set(
+    [
+        "wizard",
+        "anxiety",
+        "javelin",
+        "autumn",
+        "firefly",
+        "baptism",
+        "canvas",
+        "silver",
+        "injury",
+        "school",
+        "coffee",
+        "kidney",
+        "cabinet",
+    ]
+)
+words_z = set(
+    [
+        "dragon",
+        "jacket",
+        "energy",
+        "magnet",
+        "chimney",
+        "bakery",
+        "almond",
+        "flower",  # "o" word instead of "pumpkin",
+        "liquid",
+        "casino",
+        "church",
+        "powder",
+        "royalty",
+    ]
+)
 
 # Drop and rename columns
 columns = {
     "ResponseId": "rid",
     "Q11": "mturkID",
-    "Q13": "paragraph_text",
-    "Q14_Page Submit": "paragraph_time",
-    "Q21": "word",
+    "Q13": "paragraph_text_a",
+    "Q31": "paragraph_text_z",
+    "Q14_Page Submit": "paragraph_time_a",
+    "Q32_Page Submit": "paragraph_time_z",
+    "Q21": "word_a",
+    "Q33": "word_z",
     "Q18_1": "cs1",
     "Q18_2": "cs2",
     "Q18_3": "cs3",
@@ -45,17 +83,26 @@ df = df.rename(columns=columns)
 df = df[2:].reset_index(drop=True)  # drop first two rows, qualtrics weirdness
 
 # Add new columns
-df["letter_order"] = df["word"].map(lambda word: ord(word[2].lower()) - 96)
-df["bonus"] = df["letter_order"].map(lambda letter: (26 - letter) * 4)
+df["condition_a"] = df["word_z"].isna()
+df["word"] = df["word_a"].combine(
+    df["word_z"], lambda x, z: x.lower() if type(x) is str else z.lower()
+)
+word_to_value = (
+    lambda word: 26 - (ord(word[2].lower()) - 97)
+    if word in words_a
+    else ord(word[2].lower()) - 96
+)
+df["value"] = df["word"].map(word_to_value)
+df["bonus"] = df["value"].map(lambda value: value * 4)
 df = df.rename(columns={"word": "choice"})
 
-df.to_csv("../data/thesis_sample_clean.csv", index=False)
+df.to_csv("../data/thesis_sample_both_conditions_clean.csv", index=False)
 
 # Turn wide into long format
 # Need columns = ["last", "subject.id", "value", "order"]
 wide_df = pd.melt(
     df,
-    id_vars=["rid"],
+    id_vars=["rid", "condition_a"],
     value_vars=[
         "cs1",
         "cs2",
@@ -76,35 +123,16 @@ wide_df = pd.melt(
 wide_df = wide_df.dropna()
 
 wide_df["raw_order"] = wide_df["variable"].map(lambda x: int(x[2:]))
-wide_df["word"] = wide_df["word"].map(lambda w: w.lower())
 
 wide_df = wide_df.rename(columns={"rid": "subject.id"})
 wide_df = wide_df.drop(columns="variable")
 
-
 # Drop words not in the list
-words = set(
-    [
-        "wizard",
-        "anxiety",
-        "javelin",
-        "autumn",
-        "firefly",
-        "baptism",
-        "canvas",
-        "silver",
-        "injury",
-        "school",
-        "coffee",
-        "kidney",
-        "cabinet",
-    ]
-)
-wide_df["word"] = wide_df["word"].map(lambda w: w if w in words else np.NaN)
+wide_df["word"] = wide_df["word"].map(lambda w: w if w in words_a | words_z else np.NaN)
 wide_df = wide_df.dropna()
 
 # Add value column
-wide_df["value"] = wide_df["word"].map(lambda word: 26 - (ord(word[2].lower()) - 97))
+wide_df["value"] = wide_df["word"].map(word_to_value)
 
 # Calculate order from raw_order
 wide_df["order"] = wide_df.sort_values("raw_order").groupby("subject.id").cumcount() + 1
@@ -117,4 +145,4 @@ wide_df.loc[last_indexes, "last"] = True
 wide_df.drop(columns=["raw_order", "word"])
 
 # Write to disk
-wide_df.to_csv("../data/thesis_sample_clean_wide.csv")
+wide_df.to_csv("../data/thesis_sample_both_conditions_clean_long.csv")
