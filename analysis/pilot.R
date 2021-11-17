@@ -2,7 +2,7 @@ library(tidyr)
 library(dplyr)
 
 ## ETL
-raw_df <- read.csv("~/Dropbox/College/Thesis/Words Pilot/Words Memory Pilot_March 4, 2021_10.18.csv")
+raw_df <- read.csv("~/Desktop/thesis/data/Words Memory Pilot_November 17, 2021_07.57.csv")
 
 transform_raw <- function(experiment_versions, words) {
   df <- raw_df %>%
@@ -26,7 +26,7 @@ transform_raw <- function(experiment_versions, words) {
 }
 
 ay.words <- read.csv("~/Dropbox/College/Thesis/Words Pilot/ay.csv")$word
-ay.experiment_versions <- c("v1", "pilot")
+ay.experiment_versions <- c("v3", "pilot")
 ay.long <- transform_raw(ay.experiment_versions, ay.words)
 ay.word_counts <- as.data.frame(table(ay.long$word)) %>% rename(word = Var1, count = Freq) %>% mutate(percentage = 100 * count / length(unique(ay.long$workerId)))
 
