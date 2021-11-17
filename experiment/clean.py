@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-df = pd.read_csv("../data/thesis_sample_both_conditions.csv")
+df = pd.read_csv("../data/thesis_full.csv")
 
 words_a = set(
     [
@@ -77,7 +77,9 @@ columns = {
     "Q25_13": "memory13",
     "Q26_Page Submit": "memory_time",
     "Q16": "feedback",
+    "Q21B": "task_comprehension",
 }
+df = df[df["Finished"] != "False"]
 df = df[columns.keys()]
 df = df.rename(columns=columns)
 df = df[2:].reset_index(drop=True)  # drop first two rows, qualtrics weirdness
@@ -95,12 +97,11 @@ word_to_value = (
 df["value"] = df["word"].map(word_to_value)
 df["bonus"] = df["value"].map(lambda value: value * 4)
 df = df.rename(columns={"word": "choice"})
-
-df.to_csv("../data/thesis_sample_both_conditions_clean.csv", index=False)
+df.to_csv("../data/thesis_full_clean.csv", index=False)
 
 # Turn wide into long format
 # Need columns = ["last", "subject.id", "value", "order"]
-wide_df = pd.melt(
+long_df = pd.melt(
     df,
     id_vars=["rid", "condition_a"],
     value_vars=[
@@ -120,29 +121,29 @@ wide_df = pd.melt(
     ],
     value_name="word",
 )
-wide_df = wide_df.dropna()
+long_df = long_df.dropna()
 
-wide_df["raw_order"] = wide_df["variable"].map(lambda x: int(x[2:]))
+long_df["raw_order"] = long_df["variable"].map(lambda x: int(x[2:]))
 
-wide_df = wide_df.rename(columns={"rid": "subject.id"})
-wide_df = wide_df.drop(columns="variable")
+long_df = long_df.rename(columns={"rid": "subject.id"})
+long_df = long_df.drop(columns="variable")
 
 # Drop words not in the list
-wide_df["word"] = wide_df["word"].map(lambda w: w if w in words_a | words_z else np.NaN)
-wide_df = wide_df.dropna()
+long_df["word"] = long_df["word"].map(lambda w: w if w in words_a | words_z else np.NaN)
+long_df = long_df.dropna()
 
 # Add value column
-wide_df["value"] = wide_df["word"].map(word_to_value)
+long_df["value"] = long_df["word"].map(word_to_value)
 
 # Calculate order from raw_order
-wide_df["order"] = wide_df.sort_values("raw_order").groupby("subject.id").cumcount() + 1
+long_df["order"] = long_df.sort_values("raw_order").groupby("subject.id").cumcount() + 1
 
 # Calculate last boolean
-wide_df["last"] = False
-last_indexes = wide_df.loc[wide_df.groupby("subject.id")["order"].idxmax()].index
-wide_df.loc[last_indexes, "last"] = True
+long_df["last"] = False
+last_indexes = long_df.loc[long_df.groupby("subject.id")["order"].idxmax()].index
+long_df.loc[last_indexes, "last"] = True
 
-wide_df.drop(columns=["raw_order", "word"])
+long_df.drop(columns=["raw_order", "word"])
 
 # Write to disk
-wide_df.to_csv("../data/thesis_sample_both_conditions_clean_long.csv")
+long_df.to_csv("../data/thesis_full_clean_long.csv")
