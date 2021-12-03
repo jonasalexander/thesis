@@ -15,11 +15,20 @@ df <- raw_df %>%
 plot(aggregate(last ~ order, df, mean))
 
 # TODO: Get simulated data created in Python
-filename <- "~/Desktop/thesis/data/thesis_sample_clean_wide.csv"
+filename <- "~/Desktop/thesis/data/thesis_full_clean_long.csv"
 df <- read.csv(filename) %>% mutate(last = as.logical(last))
 
 plot(aggregate(last ~ order, df, mean))
-plot(aggregate(last ~ value, df, mean)) + abline(lm(last ~ value, df))
+plot(aggregate(last ~ value, df, mean),
+     ylim=c(0,0.4),
+     ylab="Probability of Exiting Decision Process",
+     xlab="Value of Most Recent Word Considered",
+     main="Effect of Value on Option Generation") + abline(lm(last ~ value, df), col="red")
+plot(aggregate(last ~ value, df, mean),
+     ylim=c(0,0.4),
+     ylab="Probability of Exiting Decision Process",
+     xlab="Value of Most Recent Word Considered",
+     main="Effect of Value on Option Generation")
 
 # COX
 df.hazard <- df %>%
