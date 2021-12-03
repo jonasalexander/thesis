@@ -29,7 +29,7 @@ words_z = set(
         "chimney",
         "bakery",
         "almond",
-        "flower",  # "o" word instead of "pumpkin",
+        "pumpkin",  # should have been "flower",
         "liquid",
         "casino",
         "church",
@@ -87,16 +87,53 @@ df = df[2:].reset_index(drop=True)  # drop first two rows, qualtrics weirdness
 # Add new columns
 df["condition_a"] = df["word_z"].isna()
 df["word"] = df["word_a"].combine(
-    df["word_z"], lambda x, z: x.lower() if type(x) is str else z.lower()
+    df["word_z"],
+    lambda x, z: x.lower().strip() if type(x) is str else z.lower().strip(),
 )
 word_to_value = (
     lambda word: 26 - (ord(word[2].lower()) - 97)
     if word in words_a
     else ord(word[2].lower()) - 96
 )
+word_cols = ["cs" + str(i + 1) for i in range(13)] + [
+    "memory" + str(i + 1) for i in range(13)
+]
+for col in word_cols:
+    df[col] = df[col].apply(lambda x: x.strip() if type(x) is str else x)
 df["value"] = df["word"].map(word_to_value)
 df["bonus"] = df["value"].map(lambda value: value * 4)
 df = df.rename(columns={"word": "choice"})
+
+fixed_words = [
+    ("R_2UVkjpw8nqNp8Fr", "memory1", "MAGNET"),
+    ("R_2VmOr6DZAIP0iGb", "memory1", "coffee"),
+    ("R_2VmOr6DZAIP0iGb", "memory6", "autumn"),
+    ("R_2VmOr6DZAIP0iGb", "cs9", "firefly"),
+    ("R_1jNRzCcvYInlI6C", "memory1", "pumpkin"),
+    ("R_1jNRzCcvYInlI6C", "memory7", "chimney"),
+    ("R_3pi2iY83AzmJ4oX", "memory1", "pumpkin"),
+    ("R_3pi2iY83AzmJ4oX", "memory3", "royalty"),
+    ("R_3pi2iY83AzmJ4oX", "memory4", "energy"),
+    ("R_2uy1CEMczz3ObiL", "memory2", "canvas"),
+    ("R_3RrtwB187v71qz1", "memory7", "cabinet"),
+    ("R_1DINrjhbjLrwJTc", "memory6", "powder"),
+    ("R_xyK3e6wWFB9NoCR", "memory6", "powder"),
+    ("R_6tED4N15yxqiuoV", "memory7", "jacket"),
+    ("R_beLjzWv6qkcnTTX", "memory8", "casino"),
+    ("R_24w4JqAK6TkMmV8", "memory8", "liquid"),
+    ("R_2R7Udgsy3HLIwE2", "cs1", "anxiety"),
+    ("R_2czP4efH7RPc0oZ", "cs2", "chimney"),
+    ("R_2D0lBznW12gmlsG", "cs4", "baptism"),
+    ("R_9HaQxaDLsy8nJE5", "cs5", "powder"),
+    ("R_3PcoY7M2FpV4kZ0", "cs5", "baptism"),
+    ("R_3LZjdb5uyZohCYG", "cs5", "powder"),
+    ("R_BDMrgaUZbEH1QrL", "cs9", "firefly"),
+    ("R_3DcJu0qDWE0u2c1", "cs10", "anxiety"),
+    ("R_3DcJu0qDWE0u2c1", "cs10", "anxiety"),
+]
+for rid, col, word in fixed_words:
+    df.loc[df["rid"] == rid, col] = word
+
 df.to_csv("../data/thesis_full_clean.csv", index=False)
 
 # Turn wide into long format
