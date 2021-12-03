@@ -79,7 +79,9 @@ columns = {
     "Q16": "feedback",
     "Q21B": "task_comprehension",
 }
+# Exclude subjects who didn't finish
 df = df[df["Finished"] != "False"]
+
 df = df[columns.keys()]
 df = df.rename(columns=columns)
 df = df[2:].reset_index(drop=True)  # drop first two rows, qualtrics weirdness
@@ -95,14 +97,16 @@ word_to_value = (
     if word in words_a
     else ord(word[2].lower()) - 96
 )
-word_cols = ["cs" + str(i + 1) for i in range(13)] + [
-    "memory" + str(i + 1) for i in range(13)
-]
+cs_cols = ["cs" + str(i + 1) for i in range(13)]
+memory_cols = ["memory" + str(i + 1) for i in range(13)]
+word_cols = cs_cols + memory_cols
 for col in word_cols:
-    df[col] = df[col].apply(lambda x: x.strip() if type(x) is str else x)
+    df[col] = df[col].apply(lambda x: x.strip().lower() if type(x) is str else x)
 df["value"] = df["word"].map(word_to_value)
 df["bonus"] = df["value"].map(lambda value: value * 4)
 df = df.rename(columns={"word": "choice"})
+
+df.to_csv("../data/thesis_full_rearranged.csv", index=False)
 
 fixed_words = [
     ("R_2UVkjpw8nqNp8Fr", "memory1", "MAGNET"),
@@ -134,6 +138,33 @@ fixed_words = [
 for rid, col, word in fixed_words:
     df.loc[df["rid"] == rid, col] = word
 
+# Exclude subjects who fail the comprehension question
+df = df[np.array(df["task_comprehension"] == "Crystal") ^ df["condition_a"]]
+
+# Exclude subjects whose word is not in consideration set
+choice_in_cs = df["choice"] == df[cs_cols[0]]
+for col in cs_cols:
+    choice_in_cs |= df["choice"] == df[col]
+df = df[choice_in_cs]
+
+# Remove non-list words from the consideration and memory sets
+for col in word_cols:
+    df[col] = df[col].apply(lambda w: w if w in words_a | words_z else np.NaN)
+
+# Exclude subjects who recall less than 50% of the words
+num_remembered = (
+    df.melt(id_vars=["rid"], value_vars=word_cols, value_name="word")
+    .drop(columns="variable")
+    .dropna()
+    .drop_duplicates()
+    .groupby("rid")
+    .agg({"word": "count"})
+    .reset_index("rid")
+)
+df = df.merge(
+    num_remembered.loc[num_remembered["word"] >= 6, "rid"], on="rid", how="inner"
+)
+
 df.to_csv("../data/thesis_full_clean.csv", index=False)
 
 # Turn wide into long format
@@ -164,10 +195,6 @@ long_df["raw_order"] = long_df["variable"].map(lambda x: int(x[2:]))
 
 long_df = long_df.rename(columns={"rid": "subject.id"})
 long_df = long_df.drop(columns="variable")
-
-# Drop words not in the list
-long_df["word"] = long_df["word"].map(lambda w: w if w in words_a | words_z else np.NaN)
-long_df = long_df.dropna()
 
 # Add value column
 long_df["value"] = long_df["word"].map(word_to_value)
