@@ -45,7 +45,8 @@ p_values.negative.logit <- c()
 
 for (trial in c(1:N)) {
   system(paste("source /Users/jonas/.virtualenvs/thesis/bin/activate && python3 ", filename.create_data_script, "-n ", n, " --random"))
-  df <- read.csv(filename.simulated_data_random) %>% mutate(last = as.logical(last))
+  df <- read.csv(filename.simulated_data_random) %>% mutate(last = as.logical(last)) %>% mutate(value = options)
+
   
   # COX
   df.hazard <- df %>%
@@ -62,8 +63,9 @@ for (trial in c(1:N)) {
   model.glm <- glm(last ~ order + value,
                    family = binomial(link = "logit"),
                    data = df)
-  p_values.negative.logit <- append(p_values.negative.logit, coef(summary(model.glm))[2,4])
+  p_values.negative.logit <- append(p_values.negative.logit, coef(summary(model.glm))[3,4])
 }
 
 hist(p_values.negative.cox)
 hist(p_values.negative.logit)
+
