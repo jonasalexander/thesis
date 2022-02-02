@@ -14,7 +14,7 @@ df <- raw_df %>%
 
 plot(aggregate(last ~ order, df, mean))
 
-# TODO: Get simulated data created in Python
+# Get data, can switch out empirical and simulated
 filename <- "~/Desktop/thesis/data/thesis_full_clean_long.csv"
 df <- read.csv(filename) %>% mutate(last = as.logical(last))
 
@@ -25,7 +25,7 @@ plot(aggregate(last ~ value, df, mean),
      xlab="Value of Most Recent Word Considered",
      main="Effect of Value on Option Generation") + abline(lm(last ~ value, df), col="red")
 plot(aggregate(last ~ value, df, mean),
-     ylim=c(0,0.4),
+     ylim=c(0,0.6),
      ylab="Probability of Exiting Decision Process",
      xlab="Value of Most Recent Word Considered",
      main="Effect of Value on Option Generation")
@@ -39,7 +39,7 @@ df.hazard <- df %>%
   select(subject.id, value, event, time) %>%
   mutate(value.centered = value - mean(df$value))
 
-model.coxph <- coxph(Surv(time,event) ~ log(value), data = df.hazard)
+model.coxph <- coxph(Surv(time,event) ~ value, data = df.hazard)
 summary(model.coxph)
 ggsurvplot(survfit(model.coxph, data=df.hazard),
            ggtheme = theme_minimal())
@@ -64,14 +64,18 @@ df %>%
   geom_point() +
   geom_smooth()
 
-model.glm <- glm(last ~ order + log(value),
+model.glm <- glm(last ~ order + value,
                 family = binomial(link = "logit"),
                 data = df)
 
 summary(model.glm)
 
-summary(glm(last ~ log(value), data=df, family="binomial"))
+summary(glm(last ~ value, data=df, family="binomial"))
 
+# EXTRA: Correlation between value and probability of consideration
+df.probability_consideration <- df %>% group_by(value) %>% count()
+cor.test(x=df.probability_consideration$value, y=df.probability_consideration$n)
+glm(n ~ value, data=df %>% group_by(value) %>% count())
 
 # EXTRA: Examining Cox Assumption
 zph <- cox.zph(model.coxph)
