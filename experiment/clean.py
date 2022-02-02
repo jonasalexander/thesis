@@ -80,6 +80,7 @@ columns = {
     "Q21B": "task_comprehension",
 }
 # Exclude subjects who didn't finish
+print(f"Excluded subjects who didn't finish: {sum(df['Finished'] == 'False')} out of {len(df)}")
 df = df[df["Finished"] != "False"]
 
 df = df[columns.keys()]
@@ -139,16 +140,23 @@ for rid, col, word in fixed_words:
     df.loc[df["rid"] == rid, col] = word
 
 # Exclude subjects who fail the comprehension question
+print(f"Excluded subjects who failed comprehension:\
+    {len(df.loc[~(np.array(df['task_comprehension'] == 'Crystal') ^ df['condition_a']), 'rid'].unique())}\
+    out of {len(df['rid'].unique())}")
 df = df[np.array(df["task_comprehension"] == "Crystal") ^ df["condition_a"]]
 
 # Exclude subjects whose word is not in consideration set
 choice_in_cs = df["choice"] == df[cs_cols[0]]
 for col in cs_cols:
     choice_in_cs |= df["choice"] == df[col]
+print(f"Excluded subjects whose word is not in their consideration set:\
+    {len(df.loc[~choice_in_cs, 'rid'].unique())} out of {len(df)}")
 df = df[choice_in_cs]
 
 # Remove non-list words from the consideration and memory sets
 for col in word_cols:
+    print(f"Excluding word not on the list for column {col}: \
+        {sum(df.loc[~df[col].isna(), col].apply(lambda w: 0 if w in words_a | words_z else 1))} out of {len(df.loc[~df[col].isna(), col])}")
     df[col] = df[col].apply(lambda w: w if w in words_a | words_z else np.NaN)
 
 # Exclude subjects who recall less than 50% of the words
@@ -161,6 +169,8 @@ num_remembered = (
     .agg({"word": "count"})
     .reset_index("rid")
 )
+print(f"Excluded subjects who remembered less than 50%:\
+    {sum(num_remembered['word']<=6)} out of {len(df)}")
 df = df.merge(
     num_remembered.loc[num_remembered["word"] >= 6, "rid"], on="rid", how="inner"
 )
@@ -190,6 +200,7 @@ long_df = pd.melt(
     value_name="word",
 )
 long_df = long_df.dropna()
+print(f"Fixed words: {len(fixed_words)} out of {len(long_df)}")
 
 long_df["raw_order"] = long_df["variable"].map(lambda x: int(x[2:]))
 
