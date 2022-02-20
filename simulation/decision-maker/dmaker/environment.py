@@ -32,7 +32,7 @@ class DecisionEnvironment:
         self.N = N
         # each row of V (axis=1) is 1 trial
         unsorted_Vhat = np.random.multivariate_normal(
-            np.repeat(mu, N), np.diag(np.repeat(tau, N)), num_trials
+            np.repeat(mu, N), np.diag(np.repeat(tau ** 2, N)), num_trials
         )
         self.Vhat = pd.DataFrame(np.sort(unsorted_Vhat, 1)[:, ::-1])
         self.num_trials = num_trials
@@ -45,7 +45,7 @@ class DecisionEnvironment:
         # Draw Vh_i from V_i for each trial
         for action in self.Vhat.columns:
             self.V[action] = np.random.multivariate_normal(
-                self.Vhat[action], np.diag(np.repeat(sigma, num_trials))
+                self.Vhat[action], np.diag(np.repeat(sigma ** 2, num_trials))
             )
 
         # the value of the best action

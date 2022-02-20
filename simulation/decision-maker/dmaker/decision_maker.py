@@ -146,7 +146,7 @@ class DynamicDecisionMaker(BaseDecisionMaker):
             )
 
             # Agent's simulated distribution of V given Vhat, excluding cost_eval
-            cov_matrix = np.diag(np.repeat(self.env.sigma, self.env.N))
+            cov_matrix = np.diag(np.repeat(self.env.sigma ** 2, self.env.N))
             v_dist = np.random.multivariate_normal(Vhats, cov_matrix, self.num_samples)
 
             # Agent has to get the value of the first action
@@ -219,7 +219,7 @@ class DynamicDecisionMaker(BaseDecisionMaker):
                         Vhat_index = j
                         Vb = V_prev
 
-            self.data.loc[i, "num_eval"] = j + 1
+            self.data.loc[i, "num_eval"] = j
             self.data.loc[i, "utility"] = Vb - j * self.cost_eval
             self.data.loc[i, "V_index"] = V_index
             self.data.loc[i, "Vhat_index"] = Vhat_index
