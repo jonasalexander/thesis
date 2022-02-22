@@ -106,9 +106,24 @@ class FixedDecisionMaker(BaseDecisionMaker):
                     second_best_action["utility"] - self.num_eval * self.cost_eval
                 )
 
-            self.data.loc[i, "gross_utility_last_eval"] = Vs_evaluated.loc[
-                len(Vs_evaluated) - 1, "utility"
+            self.data.loc[i, "gross_utility_last_eval"] = self.env.V.loc[
+                i, self.num_eval - 1
             ]
+
+            new_experiment_data = pd.DataFrame({"value": self.env.V.loc[i]})
+            new_experiment_data = new_experiment_data.reset_index().rename(
+                columns={"index": "order"}
+            )
+            new_experiment_data["order"] += 1
+            new_experiment_data = new_experiment_data[
+                new_experiment_data["order"] <= self.num_eval
+            ]
+            new_experiment_data["subject.id"] = i
+            new_experiment_data["last"] = False
+            new_experiment_data.loc[
+                new_experiment_data["order"] == self.num_eval, "last"
+            ] = True
+            self.experiment_data = self.experiment_data.append(new_experiment_data)
 
 
 class DynamicDecisionMaker(BaseDecisionMaker):
